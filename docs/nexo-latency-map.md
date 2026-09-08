@@ -1,4 +1,4 @@
-# JARVIS-DEV: Mapa Inteligente de Latência Extrema (Ultra-Low Latency Pipeline)
+# NEXO: Mapa Inteligente de Latência Extrema (Ultra-Low Latency Pipeline)
 
 ## 1. Topologia do Pipeline "Zero-Copy" de Latência Mínima
 
@@ -52,7 +52,7 @@ Para atingir a latência do limite da percepção humana conversacional (~300–
 │  [Recepção do 1º Chunk (Frame 0x02)]                                                              │
 │               │                                                                                   │
 │               ▼                                                                                   │
-│  [Jitter Buffer Adaptativo C++ (30ms)] ──► [Oboe AAudio Output Stream] ──► 🎧 [Ouvido do Usuário] │
+│  [Jitter Buffer Adaptativo C++ (30ms)] ──► [Oboe AAudio Output Stream] ──►  [Ouvido do Usuário] │
 └───────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -73,7 +73,7 @@ Para atingir a latência do limite da percepção humana conversacional (~300–
 | **9. Repasse Host → Phone** | Transmissão binária imediata do primeiro chunk | **28.0 ms** | 350 ms |
 | **10. Jitter Buffer + DMA** | Jitter Buffer dinâmico + Driver de Saída Oboe | **25.0 ms** | **~375 ms** |
 
-> ⏱️ **Latência Conversacional Total (Fala → Áudio no Fone):** **~375 milissegundos**.
+>  **Latência Conversacional Total (Fala → Áudio no Fone):** **~375 milissegundos**.
 > *Nota: O limiar da conversa humana natural em tempo real é de 250ms a 400ms. O sistema opera dentro da faixa de fluidez humana.*
 
 ---
@@ -81,7 +81,7 @@ Para atingir a latência do limite da percepção humana conversacional (~300–
 ## 3. As 5 Técnicas de "Engenharia Inteligente" para Ganho Extremo
 
 ### 1. Speculative Tool Execution (Execução Especulativa)
-Quando o usuário diz: *"Jarvis, qual foi o último commit na branch atual?"*
+Quando o usuário diz: *"Nexo, qual foi o último commit na branch atual?"*
 - O Host **não espera** a IA pedir a tool.
 - O Host detecta o trigger no início da frase (*"último commit"*, *"status do git"*, *"branch"*) e já dispara um `git log -1` e `git branch` para a memória RAM enquanto o áudio ainda está sendo enviado ao Google.
 - Quando a chamada `execute_shell` chega da Gemini Live, o resultado **já está na RAM pronto** → Latência da ferramenta: **0.1 ms**.

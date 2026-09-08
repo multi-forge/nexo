@@ -19,7 +19,7 @@ def run_agy_task(prompt: str):
     print("════════════════════════════════════════════════════════════════════")
     print("   DISPARANDO AGENTE AUTÔNOMO ANTIGRAVITY (AGY) NO WINDOWS          ")
     print("════════════════════════════════════════════════════════════════════\n")
-    print(f"🎯 [Objetivo]: \"{prompt}\"\n")
+    print(f"[Objetivo]: \"{prompt}\"\n")
 
     cmd = [
         r"C:\Users\Aluno\AppData\Local\agy\bin\agy.exe",
@@ -61,7 +61,7 @@ def run_agy_task(prompt: str):
                 if stype == "tool" and state == "ACTIVE":
                     tname = step.get("tool_info", {}).get("name", tool_name)
                     tools_called.append(tname)
-                    print(f"⚡ [AGY Tool Call]: Executando '{tname}'...")
+                    print(f"[AGY Tool Call]: Executando '{tname}'...")
 
             # 2. Resposta final do AGY
             elif event_type == "result":
@@ -69,7 +69,7 @@ def run_agy_task(prompt: str):
                 status = res.get("status")
                 final_response = res.get("response", "")
                 dur = res.get("duration_seconds", 0)
-                print(f"\n✅ [AGY Concluído]: Status: {status} (Duração: {dur:.2f}s)")
+                print(f"\n[AGY Concluído]: Status: {status} (Duração: {dur:.2f}s)")
 
         except json.JSONDecodeError:
             pass
@@ -78,11 +78,11 @@ def run_agy_task(prompt: str):
     total_elapsed = time.perf_counter() - t0
 
     print("\n════════════════════════════════════════════════════════════════════")
-    print("📋 RESPOSTA FINAL DO AGENTE AGY:")
+    print("RESPOSTA FINAL DO AGENTE AGY:")
     print("════════════════════════════════════════════════════════════════════")
     print(final_response)
     print("════════════════════════════════════════════════════════════════════")
-    print(f"⏱️ Tempo Total: {total_elapsed:.2f}s | Ferramentas Acionadas: {len(tools_called)} ({', '.join(set(tools_called))})")
+    print(f"Tempo Total: {total_elapsed:.2f}s | Ferramentas Acionadas: {len(tools_called)} ({', '.join(set(tools_called))})")
     print("════════════════════════════════════════════════════════════════════\n")
 
 if __name__ == "__main__":

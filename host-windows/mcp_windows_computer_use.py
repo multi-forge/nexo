@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-JARVIS-DEV: MCP Server para Real Computer Use no Windows
+Nexo: MCP Server para Real Computer Use no Windows
 =========================================================
 Implementa o protocolo Model Context Protocol (MCP) via JSON-RPC / stdio.
 Permite ao Antigravity e ao Gemini Live controlarem o desktop Windows com:
@@ -36,7 +36,7 @@ else:
     user32 = None
     gdi32 = None
 
-SCREENSHOT_PATH = os.path.join(os.environ.get("USERPROFILE", "C:\\Users\\Aluno"), "jarvis_computer_use_screen.png")
+SCREENSHOT_PATH = os.path.join(os.environ.get("USERPROFILE", "C:\\Users\\Aluno"), "nexo_computer_use_screen.png")
 
 TOOLS = [
     {

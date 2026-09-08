@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Jarvis Unified Windows Daemon (jarvis_daemon.py)
+Nexo Unified Windows Daemon (nexo_daemon.py)
 =================================================
 Motor Único e Persistente de Controle Total do Windows:
 1. Win32 Input nativo em memória C/ctypes (Mouse, Teclado, Janelas, Clipboard, Display)
@@ -234,7 +234,7 @@ class Win32NativeEngine:
 # 2. MOTOR GEMINI 3.1 LIVE STREAMING + TOOL DISPATCH EM MEMÓRIA
 # ==============================================================================
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6J2841_0N_Se9wYUWaq_1zCxQ6nb8kb-qU1FB2pTElh_Q")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_LIVE_URL = f"wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key={GEMINI_API_KEY}"
 
 DAEMON_TOOL_DECLARATIONS = [
@@ -331,7 +331,7 @@ def dispatch_tool_in_memory(name: str, args: Dict[str, Any]) -> Any:
 
 async def handle_client(websocket):
     client_ip = websocket.remote_address[0]
-    print(f"[DAEMON] 🔗 Cliente conectado: {client_ip}")
+    print(f"[DAEMON] Cliente conectado: {client_ip}")
 
     # Conecta ao Gemini 3.1 Live
     try:
@@ -353,7 +353,7 @@ async def handle_client(websocket):
                     "systemInstruction": {
                         "parts": [{
                             "text": (
-                                "Você é o Jarvis Daemon, o assistente em tempo real do desenvolvedor no Windows. "
+                                "Voce e o Nexo Daemon, o assistente em tempo real do desenvolvedor no Windows. "
                                 "Você controla o computador diretamente em memória através das suas ferramentas de Win32 nativo. "
                                 "Seja ultra-rápido, conciso e natural na fala."
                             )
@@ -387,9 +387,9 @@ async def handle_client(websocket):
                                 name = c.get("name", "")
                                 args = c.get("args", {})
                                 
-                                print(f"[DAEMON ⚡ TOOL CALL] {name}({args})")
+                                print(f"[DAEMON TOOL CALL] {name}({args})")
                                 out = dispatch_tool_in_memory(name, args)
-                                print(f"[DAEMON 🎯 RESULT] {out}")
+                                print(f"[DAEMON RESULT] {out}")
                                 
                                 responses.append({
                                     "id": call_id,
@@ -455,7 +455,7 @@ async def handle_client(websocket):
 
 async def start_daemon_server():
     print("════════════════════════════════════════════════════════════════════")
-    print("   JARVIS UNIFIED WINDOWS DAEMON ATIVO (PORTA 8765)                ")
+    print("   NEXO UNIFIED WINDOWS DAEMON ATIVO (PORTA 8765)                  ")
     print("   • Motor Win32 C/ctypes Nativo em Memória (< 1ms)                ")
     print("   • Gemini 3.1 Live Bidirecional + Voz Aoede 24kHz               ")
     print("   • Zero Scripts em Disco / Zero Process Spawning                ")
@@ -485,7 +485,7 @@ def run_mcp_stdio():
                     "result": {
                         "protocolVersion": "2024-11-05",
                         "capabilities": {"tools": {}},
-                        "serverInfo": {"name": "jarvis-daemon", "version": "1.0.0"}
+                        "serverInfo": {"name": "nexo-daemon", "version": "1.0.0"}
                     }
                 }
                 print(json.dumps(resp), flush=True)

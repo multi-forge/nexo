@@ -1,0 +1,46 @@
+# Environment and credentials
+.env
+.env.*
+*.env
+credentials.json
+service-account*.json
+
+# Session state
+session_state.json
+.nexo/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+
+# Screenshots and temporary media
+*_screenshot.png
+*_response.wav
+*_response.mp3
+cue_*.mp3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Playwright
+playwright-report/
+test-results/
+
+# Logs
+*.log

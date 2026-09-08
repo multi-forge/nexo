@@ -1,6 +1,6 @@
-# Setup Automatizado do Jarvis-Dev Host no Windows 10/11
+# Setup Automatizado do Nexo Host no Windows 10/11
 Write-Host "════════════════════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "   Instalador do Jarvis-Dev Windows Host & Real Computer Use " -ForegroundColor Green
+Write-Host "   Instalador do Nexo Windows Host & Real Computer Use " -ForegroundColor Green
 Write-Host "════════════════════════════════════════════════════════════" -ForegroundColor Cyan
 
 # 1. Habilitar OpenSSH Server
@@ -11,7 +11,7 @@ Set-Service -Name sshd -StartupType 'Automatic'
 
 # 2. Liberar Firewall
 Write-Host "[2/5] Configurando regras do Windows Firewall..." -ForegroundColor Yellow
-New-NetFirewallRule -Name 'Jarvis-Dev-Port-8765' -DisplayName 'Jarvis-Dev Gateway (Port 8765)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 8765 -Profile Any -EdgeTraversalPolicy Allow -ErrorAction SilentlyContinue
+New-NetFirewallRule -Name 'Nexo-Port-8765' -DisplayName 'Nexo Gateway (Port 8765)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 8765 -Profile Any -EdgeTraversalPolicy Allow -ErrorAction SilentlyContinue
 New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22 -Profile Any -ErrorAction SilentlyContinue
 
 # 3. Instalar Dependencias Python
@@ -23,5 +23,5 @@ playwright install chromium
 Write-Host "[4/5] Registrando Windows Computer Use MCP no AGY..." -ForegroundColor Yellow
 agy mcp add windows-computer-use python "$PSScriptRoot\mcp_windows_computer_use.py"
 
-Write-Host "`n✅ Jarvis-Dev Host instalado com sucesso!" -ForegroundColor Green
+Write-Host "`nNexo Host instalado com sucesso!" -ForegroundColor Green
 Write-Host "Para iniciar o host: python host_orchestrator.py" -ForegroundColor Cyan

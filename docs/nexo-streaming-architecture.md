@@ -1,4 +1,4 @@
-# Jarvis-Dev: Streaming de Progresso para TTS em Tempo Real
+# Nexo: Streaming de Progresso para TTS em Tempo Real
 
 ## Descoberta: `--output-format stream-json`
 
@@ -22,7 +22,7 @@ O AGY emite **eventos NDJSON em tempo real** via stdout. Cada linha é um JSON c
   }
 }
 ```
-**🔊 TTS:** *"Tarefa iniciada."*
+** TTS:** *"Tarefa iniciada."*
 
 ---
 
@@ -44,7 +44,7 @@ O AGY emite **eventos NDJSON em tempo real** via stdout. Cada linha é um JSON c
   }
 }
 ```
-**🔊 TTS:** *"Buscando arquivos Python..."*
+** TTS:** *"Buscando arquivos Python..."*
 
 #### Tool DONE (ferramenta terminou):
 ```json
@@ -62,14 +62,14 @@ O AGY emite **eventos NDJSON em tempo real** via stdout. Cada linha é um JSON c
   }
 }
 ```
-**🔊 TTS:** *"Encontrei 2 arquivos, 1.3 segundos."*
+** TTS:** *"Encontrei 2 arquivos, 1.3 segundos."*
 
 #### Agent Response (streaming de texto, chunked):
 ```json
 {"event":"step_update","step_update":{"step_type":"agent_response","text_delta":"Pr"}}
 {"event":"step_update","step_update":{"step_type":"agent_response","text_delta":"onto! Aqui está..."}}
 ```
-**🔊 TTS:** Buffer os deltas até pontuação final (`.`, `!`, `\n`) e fala a frase completa.
+** TTS:** Buffer os deltas até pontuação final (`.`, `!`, `\n`) e fala a frase completa.
 
 ---
 
@@ -89,7 +89,7 @@ O AGY emite **eventos NDJSON em tempo real** via stdout. Cada linha é um JSON c
   }
 }
 ```
-**🔊 TTS:** *"Tarefa concluída em 18 segundos."*
+** TTS:** *"Tarefa concluída em 18 segundos."*
 
 ---
 
@@ -258,7 +258,7 @@ async def stream_agy_with_narration(prompt: str, narrate_callback):
     return final_result
 ```
 
-## Integração com o Orquestrador Jarvis-Dev
+## Integração com o Orquestrador Nexo
 
 No `dispatch_tool` do orquestrador, substituir o `run_antigravity` por:
 
@@ -270,7 +270,7 @@ elif name == "run_antigravity":
         # Envia o texto como áudio via Gemini Live session
         # OU injeta diretamente na fila de TTS local
         await send_tts_to_phone(text)
-        await log_to_telegram(f"🗣 {text}")
+        await log_to_telegram(f" {text}")
 
     result = await stream_agy_with_narration(prompt, narrate)
     return {"result": result.get("response", "")[:1000] if result else "Timeout"}

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-JARVIS-DEV: Host Orchestrator com Computer Use Total (Versao de Producao)
+Nexo: Host Orchestrator com Computer Use Total (Versao de Producao)
 """
 
 import sys
@@ -22,7 +22,7 @@ import uuid
 import websockets
 from playwright.async_api import async_playwright
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6J2841_0N_Se9wYUWaq_1zCxQ6nb8kb-qU1FB2pTElh_Q")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 HOST_PORT = 8765
 PROJECT_DIR = r"C:\Users\Aluno"
 AGY_PATH = r"C:\Users\Aluno\AppData\Local\agy\bin\agy.exe"
@@ -35,7 +35,7 @@ GEMINI_WS_URL = (
 )
 
 SYSTEM_PROMPT = """
-Voce e o Jarvis, copiloto de desenvolvimento e automacao no Windows com visao e Computer Use.
+Voce e o Nexo, copiloto de desenvolvimento e automacao no Windows com visao e Computer Use.
 DIRETRIZES DE RESPOSTA:
 1. Fale SEMPRE em portugues do Brasil de forma concisa, direta e natural (maximo 6 a 12 palavras por turno).
 2. Ao receber o conteudo de uma pagina web, diga a manchete principal e o resultado de forma leve e rapida.
@@ -83,11 +83,11 @@ class BrowserManager:
             self.browser = await self.pw.chromium.launch(headless=True)
             self.page = await self.browser.new_page()
             await self.page.set_viewport_size({"width": 1280, "height": 800})
-            print("🌐 [ComputerUse] Chromium ativo na RAM!")
+            print("[ComputerUse] Chromium ativo na RAM!")
 
     async def navigate_and_read(self, url: str) -> dict:
         await self.init_browser()
-        print(f"🌐 [ComputerUse] Navegando para: {url}")
+        print(f"[ComputerUse] Navegando para: {url}")
         if not url.startswith("http"):
             url = "https://" + url
         await self.page.goto(url, wait_until="domcontentloaded", timeout=15000)
@@ -100,9 +100,9 @@ class BrowserManager:
             top_heading = title
 
         # Salva screenshot
-        shot_path = os.path.join(PROJECT_DIR, "jarvis_latest_screenshot.png")
+        shot_path = os.path.join(PROJECT_DIR, "nexo_latest_screenshot.png")
         await self.page.screenshot(path=shot_path)
-        print(f"📸 [ComputerUse] Screenshot salvo em: {shot_path}")
+        print(f"[ComputerUse] Screenshot salvo em: {shot_path}")
         
         return {
             "title": title,
@@ -147,7 +147,7 @@ async def handle_client(client_ws):
                                 p = d["clientContent"]["turns"][0]["parts"][0]["text"] if "clientContent" in d else msg
                             except Exception:
                                 p = msg
-                            print(f"👤 [Prompt Recebido]: {p}")
+                            print(f"[Prompt Recebido]: {p}")
                             await gemini_ws.send(json.dumps({"clientContent": {"turns": [{"role": "user", "parts": [{"text": p}]}], "turnComplete": True}}))
                 except Exception as e:
                     print(f"Erro client_to_gemini: {e}")
@@ -204,7 +204,7 @@ async def handle_client(client_ws):
 
 async def main():
     print("================================================================")
-    print(f"   🚀 JARVIS-DEV WINDOWS HOST COM COMPUTER USE ATIVO (PORTA {HOST_PORT})")
+    print(f"   NEXO WINDOWS HOST COM COMPUTER USE ATIVO (PORTA {HOST_PORT})")
     print("================================================================\n")
     await browser_mgr.init_browser()
     async with websockets.serve(handle_client, "0.0.0.0", HOST_PORT):

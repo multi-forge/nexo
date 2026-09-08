@@ -1,4 +1,4 @@
-# JARVIS-DEV: Arquitetura Orientada a Eventos em Tempo Real
+# NEXO: Arquitetura Orientada a Eventos em Tempo Real
 ### Streaming de Voz Contínuo, Gerenciador de Tasks Assíncronas e Computer Use
 
 ---
@@ -42,25 +42,25 @@ O usuário fala continuamente no microfone. O fluxo de áudio entra na **Gemini 
 
 ## 2. As 4 Rotas de Execução Explicadas
 
-### 🟢 Rota 1: Diálogo Direto (< 350 ms)
+###  Rota 1: Diálogo Direto (< 350 ms)
 - **Quando ocorre:** Quando o usuário faz uma pergunta conceitual ou conversa informal.
 - **Comportamento:** O Gemini Live responde **instantaneamente por voz** sem chamar nenhuma ferramenta.
 - *Exemplo:* 
-  > 👤 *"Jarvis, qual a diferença entre processo e thread?"*  
-  > 🎧 *"Processos têm memória isolada, threads compartilham o mesmo espaço de memória."*
+  >  *"Nexo, qual a diferença entre processo e thread?"*  
+  >  *"Processos têm memória isolada, threads compartilham o mesmo espaço de memória."*
 
 ---
 
-### 🟡 Rota 2: Fast Tool Síncrona (10 ms – 100 ms)
+###  Rota 2: Fast Tool Síncrona (10 ms – 100 ms)
 - **Quando ocorre:** Comandos de terminal que duram menos de 1 segundo (`git branch`, `git status`, `cat`, `date`).
 - **Comportamento:** Executa na hora, o Gemini recebe o retorno e emite uma **frase única direta**.
 - *Exemplo:*
-  > 👤 *"Qual a branch atual?"*  
-  > 🎧 *"Branch develop, três commits à frente da main."*
+  >  *"Qual a branch atual?"*  
+  >  *"Branch develop, três commits à frente da main."*
 
 ---
 
-### 🔵 Rota 3: AGY Task Assíncrona (Background Job)
+###  Rota 3: AGY Task Assíncrona (Background Job)
 - **Quando ocorre:** Tarefas de programação que levam de 15 a 60 segundos (escrever código, refatorar, rodar testes pesados).
 - **Comportamento:**
   1. O Gemini Live **não trava**. Ele cria um `Task ID` e fala uma confirmação de **1 segundo**: *"Iniciando a refatoração do auth..."*
@@ -70,16 +70,16 @@ O usuário fala continuamente no microfone. O fluxo de áudio entra na **Gemini 
 
 ---
 
-### 🟣 Rota 4: Computer Use (Navegador e Controle do Sistema)
+###  Rota 4: Computer Use (Navegador e Controle do Sistema)
 - **Quando ocorre:** Quando a tarefa exige interação visual com a interface gráfica do computador (abrir navegador, fazer login em painéis AWS/Vercel, preencher forms, tirar screenshots).
 - **Como funciona:**
   - O Host roda um agente de **Computer Use** conectado via Playwright / xdotool / PyAutoGUI / MCP Browser.
   - A cada ação visual relevante (ex: *"Logou no painel"*, *"Clicou em Deploy"*), uma minúscula pílula de voz é emitida e um screenshot comprimido vai para o Telegram.
 - *Exemplo:*
-  > 👤 *"Jarvis, entra no painel da Vercel e promove o último preview pra produção."*  
-  > 🎧 *"Abrindo o painel da Vercel..."*  
+  >  *"Nexo, entra no painel da Vercel e promove o último preview pra produção."*  
+  >  *"Abrindo o painel da Vercel..."*  
   > *(Agente navega, clica no botão 'Promote to Production')*  
-  > 🎧 *"Deploy em produção acionado com sucesso. Te mandei o link no Telegram."*
+  >  *"Deploy em produção acionado com sucesso. Te mandei o link no Telegram."*
 
 ---
 
@@ -90,7 +90,7 @@ Este código implementa o servidor completo com suporte a **Áudio Contínuo**, 
 ```python
 #!/usr/bin/env python3
 """
-Jarvis-Dev: Master Orchestrator com Tasks Assíncronas e Computer Use
+Nexo: Master Orchestrator com Tasks Assíncronas e Computer Use
 ====================================================================
 Implementa:
 1. Streaming de áudio bidirecional contínuo (Gemini 3.1 Live)
@@ -112,7 +112,7 @@ from google import genai
 from google.genai import types
 
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
-HOST_PORT = int(os.environ.get("JARVIS_PORT", "8765"))
+HOST_PORT = int(os.environ.get("NEXO_PORT", "8765"))
 PROJECT_DIR = os.environ.get("PROJECT_DIR", os.path.expanduser("~"))
 
 client = genai.Client(api_key=GEMINI_API_KEY, http_options={"api_version": "v1beta"})
@@ -120,7 +120,7 @@ client = genai.Client(api_key=GEMINI_API_KEY, http_options={"api_version": "v1be
 # ─── System Instruction Concisa e Natural ──────────────────────────────
 
 SYSTEM_INSTRUCTION = """
-Você é o Jarvis, copiloto técnico de programação e automação no fone de ouvido.
+Você é o Nexo, copiloto técnico de programação e automação no fone de ouvido.
 
 REGRAS DE CONVERSAÇÃO E RESPOSTA:
 1. Seja direto, natural e conciso (máximo 6 a 12 palavras por fala).
@@ -183,7 +183,7 @@ class TaskManager:
 
     async def launch_agy_task(self, prompt: str, description: str) -> str:
         task_id = f"task_{uuid.uuid4().hex[:6]}"
-        print(f"🚀 [TaskManager] Iniciando AGY Task {task_id}: '{description}'")
+        print(f" [TaskManager] Iniciando AGY Task {task_id}: '{description}'")
 
         async def _run():
             t0 = time.perf_counter()
@@ -208,7 +208,7 @@ class TaskManager:
 
     async def launch_computer_use(self, action: str, target: str, description: str) -> str:
         task_id = f"cu_{uuid.uuid4().hex[:6]}"
-        print(f"🖥️ [ComputerUse] Executando: {action} em '{target}'")
+        print(f" [ComputerUse] Executando: {action} em '{target}'")
 
         async def _run_cu():
             await asyncio.sleep(2) # Simulação de navegação / clique
@@ -222,7 +222,7 @@ class TaskManager:
 # ─── WebSocket Gateway e Bridge com Gemini Live ────────────────────────
 
 async def handle_client(websocket):
-    print("🎧 [Gateway] Smartphone conectado via Tailscale.")
+    print(" [Gateway] Smartphone conectado via Tailscale.")
 
     config = types.LiveConnectConfig(
         response_modalities=[types.LiveServerContentResponseModalities.AUDIO],
@@ -237,7 +237,7 @@ async def handle_client(websocket):
 
         # Fila de eventos assíncronos (notificações de tasks para falar na sessão)
         async def inject_event_into_voice(event_message: str):
-            print(f"📢 [Voice Event Push]: {event_message}")
+            print(f" [Voice Event Push]: {event_message}")
             await session.send(
                 input=types.Content(parts=[types.Part.from_text(event_message)]),
                 end_of_turn=True
@@ -279,7 +279,7 @@ async def handle_client(websocket):
                         for fc in response.tool_call.function_calls:
                             name = fc.name
                             args = fc.args
-                            print(f"🔧 [Tool Call]: {name}({args})")
+                            print(f" [Tool Call]: {name}({args})")
 
                             # Rota 2: Fast Shell
                             if name == "fast_shell":
@@ -320,7 +320,7 @@ async def handle_client(websocket):
         await asyncio.gather(mic_in_loop(), gemini_out_loop())
 
 async def main():
-    print(f"🚀 [Jarvis Master Gateway] Escutando na porta {HOST_PORT}...")
+    print(f" [Nexo Master Gateway] Escutando na porta {HOST_PORT}...")
     async with websockets.serve(handle_client, "0.0.0.0", HOST_PORT):
         await asyncio.Future()
 
@@ -335,7 +335,7 @@ if __name__ == "__main__":
 O Computer Use opera através de **Visão Computacional + Árvore de Acessibilidade (DOM)**:
 
 ```
-[Usuário no Fone] ──► "Jarvis, abre a issue #42 no GitHub e aprova o PR."
+[Usuário no Fone] ──► "Nexo, abre a issue #42 no GitHub e aprova o PR."
                             │
                             ▼
                [Gemini Live 3.1 (Router)]
@@ -344,7 +344,7 @@ O Computer Use opera através de **Visão Computacional + Árvore de Acessibilid
                             │
                             ├────────────────────────────────────────┐
                             ▼                                        ▼
-               🎧 [Fala Imediata: 1.5s]                    [Computer Use Agent]
+                [Fala Imediata: 1.5s]                    [Computer Use Agent]
                "Abrindo o PR 42 no GitHub..."                       │
                                                            • Abre URL com Playwright
                                                            • Localiza botão 'Review changes'
@@ -356,7 +356,7 @@ O Computer Use opera através de **Visão Computacional + Árvore de Acessibilid
                                                                     │
                                                            ┌────────┴────────┐
                                                            ▼                 ▼
-                                               🎧 [Áudio no Fone]     📱 [Telegram]
+                                                [Áudio no Fone]      [Telegram]
                                               "PR 42 aprovado."     (Screenshot do PR)
 ```
 
@@ -364,9 +364,9 @@ O Computer Use opera através de **Visão Computacional + Árvore de Acessibilid
 
 ## 5. Resumo da Experiência do Usuário
 
-| Situação | O que você fala | O que o Jarvis faz | O que você ouve no fone |
+| Situação | O que você fala | O que o Nexo faz | O que você ouve no fone |
 |---|---|---|---|
-| **Pergunta rápida** | *"Que horas são?"* | Responde direto da memória | 🎧 *"São 15 horas e 42 minutos."* |
-| **Comando de terminal** | *"Qual a branch?"* | Roda `git branch` (20ms) | 🎧 *"Branch develop, tudo atualizado."* |
-| **Código complexo** | *"Refatora o módulo de auth."* | Cria **AGY Task** em background | 🎧 *"Iniciando a refatoração do auth."* <br> *(30s depois)* <br> 🎧 *"Refatoração concluída, testes passaram."* |
-| **Computer Use** | *"Entra na AWS e reinicia o staging."* | Aciona automação de browser | 🎧 *"Abrindo o painel da AWS..."* <br> *(5s depois)* <br> 🎧 *"Instância reiniciada com sucesso."* |
+| **Pergunta rápida** | *"Que horas são?"* | Responde direto da memória |  *"São 15 horas e 42 minutos."* |
+| **Comando de terminal** | *"Qual a branch?"* | Roda `git branch` (20ms) |  *"Branch develop, tudo atualizado."* |
+| **Código complexo** | *"Refatora o módulo de auth."* | Cria **AGY Task** em background |  *"Iniciando a refatoração do auth."* <br> *(30s depois)* <br>  *"Refatoração concluída, testes passaram."* |
+| **Computer Use** | *"Entra na AWS e reinicia o staging."* | Aciona automação de browser |  *"Abrindo o painel da AWS..."* <br> *(5s depois)* <br>  *"Instância reiniciada com sucesso."* |

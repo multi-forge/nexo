@@ -1,4 +1,4 @@
-# JARVIS-DEV — Especificação Completa de Engenharia
+# NEXO — Especificação Completa de Engenharia
 ### Arquitetura Hands-Free de Desenvolvimento Móvel por Voz em Tempo Real
 #### Revisão 2.0 — Consolidada e Validada
 
@@ -6,7 +6,7 @@
 
 ## 1. Visão Geral da Topologia
 
-O Jarvis-Dev é um sistema distribuído para desenvolvimento de software hands-free.
+O Nexo é um sistema distribuído para desenvolvimento de software hands-free.
 O smartphone no bolso (tela bloqueada, fone de ouvido) atua como terminal de áudio de
 baixa latência com VAD local. O computador host executa o daemon orquestrador conectado
 à Gemini Multimodal Live API, ao Antigravity CLI, aos servidores MCP e ao bot do Telegram.
@@ -107,7 +107,7 @@ import kotlin.math.min
 class AudioService : Service() {
 
     companion object {
-        private const val TAG = "JarvisDev"
+        private const val TAG = "NexoDev"
         private const val SAMPLE_RATE = 16000
         private const val FRAME_SIZE = 512           // amostras por chunk (32ms)
         private const val PLAYBACK_RATE = 24000       // Gemini retorna 24kHz
@@ -159,7 +159,7 @@ class AudioService : Service() {
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
-            "JarvisDev::AudioLock"
+            "NexoDev::AudioLock"
         ).apply { acquire(24 * 60 * 60 * 1000L) }
     }
 
@@ -301,12 +301,12 @@ class AudioService : Service() {
         manager.createNotificationChannel(
             NotificationChannel(
                 channelId,
-                "Jarvis Voice Engine",
+                "Nexo Voice Engine",
                 NotificationManager.IMPORTANCE_LOW
             )
         )
         return NotificationCompat.Builder(this, channelId)
-            .setContentTitle("Jarvis-Dev")
+            .setContentTitle("Nexo")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_sys_speakerphone)
             .setOngoing(true)
@@ -422,7 +422,7 @@ object AudioPlaybackEngine {
 ```python
 #!/usr/bin/env python3
 """
-Jarvis-Dev Host Orchestrator v2.0
+Nexo Host Orchestrator v2.0
 Daemon que conecta o smartphone (via WebSocket) à Gemini Live API,
 com dispatch de ferramentas, narração TTS em tempo real e log no Telegram.
 """
@@ -443,8 +443,8 @@ from google.genai import types
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-HOST_PORT = int(os.environ.get("JARVIS_PORT", "8765"))
-AUTH_TOKEN = os.environ.get("JARVIS_AUTH_TOKEN", "jarvis-secret-token-2024")
+HOST_PORT = int(os.environ.get("NEXO_PORT", "8765"))
+AUTH_TOKEN = os.environ.get("NEXO_AUTH_TOKEN", "jarvis-secret-token-2024")
 PROJECT_DIR = os.environ.get("PROJECT_DIR", os.path.expanduser("~/project"))
 STATE_FILE = Path.home() / ".jarvis" / "session_state.json"
 
@@ -458,10 +458,10 @@ client = genai.Client(api_key=GEMINI_API_KEY, http_options={"api_version": "v1al
 
 # ─── System Instruction ─────────────────────────────────────────────
 
-JARVIS_SYSTEM_INSTRUCTION = """
+NEXO_SYSTEM_INSTRUCTION = """
 ## Identidade
 
-Você é Jarvis, copiloto técnico de programação por voz em tempo real.
+Você é Nexo, copiloto técnico de programação por voz em tempo real.
 O usuário está em movimento — celular no bolso, fone de ouvido, sem tela.
 Toda comunicação é exclusivamente por áudio bidirecional.
 
@@ -953,7 +953,7 @@ async def dispatch_tool(call, send_audio_narration):
         output = (stdout.decode() + stderr.decode()).strip()
 
         asyncio.create_task(log_to_telegram(
-            f"💻 `{cmd}`\n```\n{output[:3500]}\n```"
+            f" `{cmd}`\n```\n{output[:3500]}\n```"
         ))
 
         return {"output": output[:1500]}
@@ -963,7 +963,7 @@ async def dispatch_tool(call, send_audio_narration):
 
         await send_audio_narration("Iniciando tarefa no Antigravity.")
         asyncio.create_task(log_to_telegram(
-            f"🤖 *AGY Task:* `{prompt[:200]}`"
+            f" *AGY Task:* `{prompt[:200]}`"
         ))
 
         result = await stream_agy_with_narration(prompt, send_audio_narration)
@@ -972,7 +972,7 @@ async def dispatch_tool(call, send_audio_narration):
             response = result.get("response", "")[:1000]
             duration = result.get("duration_seconds", 0)
             asyncio.create_task(log_to_telegram(
-                f"✅ *AGY Concluído* ({duration:.0f}s)\n```\n{response[:3500]}\n```"
+                f" *AGY Concluído* ({duration:.0f}s)\n```\n{response[:3500]}\n```"
             ))
             return {"result": response}
         else:
@@ -1009,7 +1009,7 @@ async def audio_bridge_handler(websocket):
 
     # ── Contexto de reconexão ──
     reconnect_ctx = await build_reconnect_context()
-    system_text = JARVIS_SYSTEM_INSTRUCTION + "\n\n" + reconnect_ctx
+    system_text = NEXO_SYSTEM_INSTRUCTION + "\n\n" + reconnect_ctx
 
     # ── Configuração da sessão Gemini Live ──
     config = types.LiveConnectConfig(
@@ -1148,9 +1148,9 @@ async def audio_bridge_handler(websocket):
 # ─── Main ─────────────────────────────────────────────────────────────
 
 async def main():
-    print(f"[Jarvis Gateway] Porta {HOST_PORT} | Projeto: {PROJECT_DIR}")
-    print(f"[Jarvis Gateway] Telegram: {'✅' if TELEGRAM_BOT_TOKEN else '❌'}")
-    print(f"[Jarvis Gateway] Aguardando conexão do smartphone...")
+    print(f"[Nexo Gateway] Porta {HOST_PORT} | Projeto: {PROJECT_DIR}")
+    print(f"[Nexo Gateway] Telegram: {'' if TELEGRAM_BOT_TOKEN else ''}")
+    print(f"[Nexo Gateway] Aguardando conexão do smartphone...")
 
     async with websockets.serve(
         audio_bridge_handler,
@@ -1182,12 +1182,12 @@ set -euo pipefail
 PROJECT_DIR="${PROJECT_DIR:-$HOME/project}"
 
 echo "═══════════════════════════════════════════════"
-echo "  JARVIS-DEV — Instalação dos MCPs Essenciais  "
+echo "  NEXO — Instalação dos MCPs Essenciais  "
 echo "═══════════════════════════════════════════════"
 
 # ── Tier 1: Essenciais ──
 
-echo -e "\n🔴 Tier 1: Essenciais\n"
+echo -e "\n Tier 1: Essenciais\n"
 
 echo "  [1/4] Git — operações Git estruturadas"
 agy mcp add git -- npx -y @anthropic/mcp-server-git --repository "$PROJECT_DIR"
@@ -1203,7 +1203,7 @@ agy mcp add sequential-thinking -- npx -y @anthropic/mcp-sequential-thinking
 
 # ── Tier 2: Alto Valor ──
 
-echo -e "\n🟡 Tier 2: Alto Valor\n"
+echo -e "\n Tier 2: Alto Valor\n"
 
 echo "  [5/8] GitHub — PRs, issues, CI/CD"
 echo "         Requer: export GITHUB_PERSONAL_ACCESS_TOKEN=ghp_..."
@@ -1219,7 +1219,7 @@ agy mcp add memory -- npx -y @anthropic/mcp-server-memory
 echo "  [8/8] Docker — gerenciamento de containers"
 agy mcp add docker -- npx -y @anthropic/mcp-server-docker
 
-echo -e "\n✅ 8 MCPs instalados com sucesso."
+echo -e "\n 8 MCPs instalados com sucesso."
 echo ""
 echo "Verifique com: agy mcp list"
 ```
@@ -1309,7 +1309,7 @@ cat >> ~/.bashrc << 'EOF'
 export GEMINI_API_KEY="sua_chave_gemini"
 export TELEGRAM_BOT_TOKEN="token_do_bot"          # opcional
 export TELEGRAM_CHAT_ID="seu_chat_id"              # opcional
-export JARVIS_AUTH_TOKEN="token-secreto-forte"
+export NEXO_AUTH_TOKEN="token-secreto-forte"
 export PROJECT_DIR="$HOME/project"
 EOF
 source ~/.bashrc
@@ -1341,7 +1341,7 @@ python3 host_orchestrator.py
 #    - Configurar AUTH_TOKEN igual ao do PC
 
 # 4. Instalar e configurar
-#    - Configurações > Apps > Jarvis-Dev > Bateria > Irrestrito
+#    - Configurações > Apps > Nexo > Bateria > Irrestrito
 #    - Conceder permissão de microfone
 #    - Conectar fone de ouvido com microfone
 
@@ -1355,7 +1355,7 @@ python3 host_orchestrator.py
 # Deve aparecer: [Gateway] Cliente autenticado: 100.x.y.z
 
 # Testar voz
-# Falar: "Jarvis, qual a branch atual?"
+# Falar: "Nexo, qual a branch atual?"
 # Esperar: resposta no fone em ~400ms
 
 # Testar AGY
@@ -1364,7 +1364,7 @@ python3 host_orchestrator.py
 
 # Testar Safety Ring
 # Falar: "Deleta tudo com rm -rf"
-# Esperar: Jarvis bloqueia e pede confirmação
+# Esperar: Nexo bloqueia e pede confirmação
 ```
 
 ---
@@ -1372,13 +1372,13 @@ python3 host_orchestrator.py
 ## 9. Estrutura de Arquivos do Projeto
 
 ```
-jarvis-dev/
+nexo/
 ├── host/
 │   ├── host_orchestrator.py          # Daemon principal
 │   ├── jarvis-mcp-setup.sh           # Instalação dos MCPs
 │   ├── requirements.txt              # google-genai, websockets, aiohttp
 │   └── systemd/
-│       └── jarvis-dev.service         # Unit file para rodar como daemon
+│       └── nexo.service         # Unit file para rodar como daemon
 │
 ├── android/
 │   ├── app/src/main/java/com/jarvis/dev/
@@ -1404,20 +1404,20 @@ jarvis-dev/
 ## 10. Systemd Unit (Daemon no Host)
 
 ```ini
-# /etc/systemd/system/jarvis-dev.service
+# /etc/systemd/system/nexo.service
 [Unit]
-Description=Jarvis-Dev Voice Orchestrator
+Description=Nexo Voice Orchestrator
 After=network-online.target tailscaled.service
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=seu_usuario
-WorkingDirectory=/home/seu_usuario/jarvis-dev/host
+WorkingDirectory=/home/seu_usuario/nexo/host
 Environment=GEMINI_API_KEY=sua_chave
 Environment=TELEGRAM_BOT_TOKEN=token
 Environment=TELEGRAM_CHAT_ID=chat_id
-Environment=JARVIS_AUTH_TOKEN=token-secreto
+Environment=NEXO_AUTH_TOKEN=token-secreto
 Environment=PROJECT_DIR=/home/seu_usuario/project
 ExecStart=/home/seu_usuario/jarvis-env/bin/python3 host_orchestrator.py
 Restart=always
@@ -1429,6 +1429,6 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now jarvis-dev
-sudo journalctl -u jarvis-dev -f   # Monitorar logs
+sudo systemctl enable --now nexo
+sudo journalctl -u nexo -f   # Monitorar logs
 ```

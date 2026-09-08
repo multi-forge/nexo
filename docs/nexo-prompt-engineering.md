@@ -1,30 +1,30 @@
-# Jarvis-Dev: Prompt Engineering & Voice UX
+# Nexo: Prompt Engineering & Voice UX
 
 ## Filosofia Central
 
 > O usuário está **caminhando na rua, com o celular no bolso e fone de ouvido**.
 > Ele não pode ler. Ele não pode ver código. Ele não pode digitar.
-> Tudo que existe é **a voz dele** e **a voz do Jarvis**.
+> Tudo que existe é **a voz dele** e **a voz do Nexo**.
 
 Isso impõe 5 regras de ouro:
 
 1. **Nunca ditar código** — Ninguém quer ouvir "abre parênteses, fecha parênteses, dois pontos, nova linha"
 2. **Confirmar com ação, não com eco** — Em vez de repetir o pedido, execute e confirme o resultado
-3. **Ser telegráfico** — Cada segundo de fala do Jarvis é um segundo que o usuário não pode falar
-4. **Manter estado mental** — O Jarvis precisa saber *onde* o usuário está no raciocínio, não só no código
+3. **Ser telegráfico** — Cada segundo de fala do Nexo é um segundo que o usuário não pode falar
+4. **Manter estado mental** — O Nexo precisa saber *onde* o usuário está no raciocínio, não só no código
 5. **Antecipar, não esperar** — Se o teste falhou, já sugira o próximo passo antes de ser perguntado
 
 ---
 
 ## 1. System Instruction — Gemini Live Session
 
-Este é o prompt principal injetado na sessão Live API. Ele define **quem** o Jarvis é.
+Este é o prompt principal injetado na sessão Live API. Ele define **quem** o Nexo é.
 
 ```python
-JARVIS_SYSTEM_INSTRUCTION = """
+NEXO_SYSTEM_INSTRUCTION = """
 ## Identidade
 
-Você é Jarvis, copiloto técnico de programação por voz em tempo real.
+Você é Nexo, copiloto técnico de programação por voz em tempo real.
 O usuário está em movimento — celular no bolso, fone de ouvido, sem tela.
 Toda comunicação é exclusivamente por áudio bidirecional.
 
@@ -134,7 +134,7 @@ O Gemini Live precisa fazer essa tradução internamente.
 |---|---|
 | *"Cria um endpoint de login"* | `"No arquivo app/routes/auth.py, crie um endpoint POST /api/auth/login que recebe {email, password} no body JSON, valida com bcrypt contra o model User do SQLAlchemy, e retorna um JWT com exp de 24h. Siga o padrão dos outros endpoints em app/routes/. Inclua tratamento de erro 401 e 422."` |
 | *"Refatora aquela função grande"* | `"No arquivo app/services/payment.py, refatore a função process_payment (atualmente com ~120 linhas) em funções menores: validate_payment_data, charge_provider, update_order_status. Mantenha a interface pública inalterada. Preserve todos os testes existentes."` |
-| *"Corrige o bug do login"* | *(Jarvis primeiro executa `pytest tests/test_auth.py -x` para ver o erro, depois formula o prompt com o stack trace específico)* |
+| *"Corrige o bug do login"* | *(Nexo primeiro executa `pytest tests/test_auth.py -x` para ver o erro, depois formula o prompt com o stack trace específico)* |
 
 Este comportamento é induzido pela system instruction — o Gemini Live aprende a formular prompts ricos ao ver o padrão nos exemplos.
 
@@ -142,7 +142,7 @@ Este comportamento é induzido pela system instruction — o Gemini Live aprende
 
 ## 3. Contexto Dinâmico na Reconexão de Sessão
 
-Quando a sessão do Gemini Live reseta (sliding window de ~8 min), o Jarvis precisa reinjetar contexto. Este é o **template de reconexão**:
+Quando a sessão do Gemini Live reseta (sliding window de ~8 min), o Nexo precisa reinjetar contexto. Este é o **template de reconexão**:
 
 ```python
 RECONNECT_CONTEXT_TEMPLATE = """
@@ -203,7 +203,7 @@ Quando o AGY está executando via `stream-json`, os eventos brutos precisam vira
 
 ```python
 NARRATOR_SYSTEM = """
-Você é o narrador de progresso do Jarvis-Dev.
+Você é o narrador de progresso do Nexo.
 Recebe eventos JSON de uma tarefa de programação em andamento
 e produz UMA frase curta em português para ser falada em voz alta.
 
@@ -320,12 +320,12 @@ def _translate_pytest(line: str) -> str:
 
 ## 5. Níveis de Verbosidade Adaptativa
 
-O Jarvis ajusta automaticamente o quanto fala baseado no **ritmo da conversa**:
+O Nexo ajusta automaticamente o quanto fala baseado no **ritmo da conversa**:
 
 ```python
 class VerbosityController:
     """
-    Adapta a verbosidade do Jarvis baseado no contexto.
+    Adapta a verbosidade do Nexo baseado no contexto.
 
     Nível 1 (MÍNIMO):  Só resultados finais. "Pronto." / "Falhou."
     Nível 2 (NORMAL):  Resultado + contexto breve. (padrão)
@@ -370,66 +370,66 @@ class VerbosityController:
 ### Cenário 1: Feature nova (fluxo completo)
 
 ```
-👤 "Jarvis, cria um endpoint de upload de avatar no profile."
+ "Nexo, cria um endpoint de upload de avatar no profile."
 
-🤖 "Criando endpoint de upload... lendo o módulo de rotas atual...
+ "Criando endpoint de upload... lendo o módulo de rotas atual...
      editando routes/profile.py... adicionando validação de imagem...
      criando teste... rodando testes... 8 de 8 passaram.
      Endpoint POST /api/profile/avatar criado. Aceita JPEG e PNG
      até 5 mega. Quer que eu commite?"
 
-👤 "Commita."
+ "Commita."
 
-🤖 "Commitado: feat: add avatar upload endpoint. Faço push?"
+ "Commitado: feat: add avatar upload endpoint. Faço push?"
 
-👤 "Sim."
+ "Sim."
 
-🤖 "Push feito pra develop."
+ "Push feito pra develop."
 ```
 
 ### Cenário 2: Debug (iterativo)
 
 ```
-👤 "O CI tá falhando, dá uma olhada."
+ "O CI tá falhando, dá uma olhada."
 
-🤖 "Checando... o pytest tem 2 falhas. test_payment_webhook:
+ "Checando... o pytest tem 2 falhas. test_payment_webhook:
      timeout esperando callback do Stripe. test_email_send:
      mock do SMTP não foi configurado. Os dois são problemas
      de fixture. Qual quer resolver primeiro?"
 
-👤 "O do pagamento."
+ "O do pagamento."
 
-🤖 "Analisando... o teste espera uma resposta do webhook em 5
+ "Analisando... o teste espera uma resposta do webhook em 5
      segundos, mas o mock server tá levando 8. Posso aumentar o
      timeout ou otimizar o mock. Recomendo otimizar, é mais limpo."
 
-👤 "Otimiza."
+ "Otimiza."
 
-🤖 "Editando test fixtures... aplicado. Rodando teste isolado...
+ "Editando test fixtures... aplicado. Rodando teste isolado...
      passou. Rodo a suite completa?"
 ```
 
 ### Cenário 3: Comando destrutivo (Safety Ring)
 
 ```
-👤 "Reseta a branch pro último release."
+ "Reseta a branch pro último release."
 
-🤖 "Isso vai fazer git reset --hard pro tag v2.3.1. Você tem 4
+ "Isso vai fazer git reset --hard pro tag v2.3.1. Você tem 4
      commits não-pushed que seriam perdidos. Confirma?"
 
-👤 "Hmm, espera."
+ "Hmm, espera."
 
-🤖 "Abortado. Quer que eu crie uma branch de backup antes?"
+ "Abortado. Quer que eu crie uma branch de backup antes?"
 ```
 
 ### Cenário 4: Reconexão transparente
 
 ```
-🔄 [Sessão resetou internamente — 8 min de contexto]
+ [Sessão resetou internamente — 8 min de contexto]
 
-👤 "E aí, terminou?"
+ "E aí, terminou?"
 
-🤖 "Sim, a refatoração do auth terminou. 3 arquivos alterados,
+ "Sim, a refatoração do auth terminou. 3 arquivos alterados,
      todos os testes passando. O último que eu fiz foi extrair a
      validação de token pra uma função separada."
 ```

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Jarvis-Dev: Benchmark Completo de Computer Use e Retorno de Voz
+Nexo: Benchmark Completo de Computer Use e Retorno de Voz
 ===============================================================
 - Conecta ao Windows Host via Tailscale WebSocket
 - Dispara navegacao web real no Chromium em RAM
@@ -32,15 +32,15 @@ async def run_cu_benchmark():
         t_conn = (time.perf_counter() - t0) * 1000
         print(f"[1] Conexao Celular ➔ Windows Host (Tailscale): {t_conn:.1f} ms")
 
-        prompt = "Jarvis, acesse 'https://news.ycombinator.com', tire um screenshot e me diga em uma frase curta qual a manchete principal."
-        print(f"\n👤 [Celular] Enviando comando de Computer Use:\n   \"{prompt}\"\n")
+        prompt = "Nexo, acesse 'https://news.ycombinator.com', tire um screenshot e me diga em uma frase curta qual a manchete principal."
+        print(f"\n[Celular] Enviando comando de Computer Use:\n   \"{prompt}\"\n")
         
         t_send = time.perf_counter()
         await ws.send(prompt)
 
         audio_bytes = []
         first_audio_t = None
-        print("🖥️  [Windows] Executando Computer Use (Playwright Chromium + Visao)...")
+        print("[Windows] Executando Computer Use (Playwright Chromium + Visao)...")
 
         for i in range(50):
             try:
@@ -53,7 +53,7 @@ async def run_cu_benchmark():
                 if first_audio_t is None:
                     first_audio_t = time.perf_counter()
                     ttfa_ms = (first_audio_t - t_send) * 1000
-                    print(f"\n⚡ [2] TIME TO FIRST AUDIO (Voz no Ouvido apos Computer Use): {ttfa_ms:.1f} ms ({ttfa_ms/1000:.2f}s)")
+                    print(f"\n[2] TIME TO FIRST AUDIO (Voz no Ouvido apos Computer Use): {ttfa_ms:.1f} ms ({ttfa_ms/1000:.2f}s)")
                 audio_bytes.append(raw[1:])
             
             # Se já recebemos mais de 100KB de áudio, podemos concluir
@@ -67,33 +67,33 @@ async def run_cu_benchmark():
             pcm = b"".join(audio_bytes)
             dur_s = len(pcm) / (24000 * 2)
             
-            print(f"[3] Duracao da fala do Jarvis: {dur_s:.2f} segundos ({len(pcm):,} bytes PCM 24kHz)")
+            print(f"[3] Duracao da fala do Nexo: {dur_s:.2f} segundos ({len(pcm):,} bytes PCM 24kHz)")
             print(f"[4] TEMPO TOTAL DA OPERACAO COMPLETA: {dur_total_ms:.1f} ms ({dur_total_ms/1000:.2f}s)")
 
             # Salvar WAV
-            wav_path = os.path.join(DOWNLOADS, "jarvis_computer_use_complete_voice.wav")
+            wav_path = os.path.join(DOWNLOADS, "nexo_computer_use_complete_voice.wav")
             with wave.open(wav_path, "wb") as wav:
                 wav.setnchannels(1)
                 wav.setsampwidth(2)
                 wav.setframerate(24000)
                 wav.writeframes(pcm)
-            print(f"\n📁 [Audio Completo Salvo]: {wav_path}")
+            print(f"\n[Audio Completo Salvo]: {wav_path}")
 
             # Baixar screenshot atualizado do Windows via SCP
-            print("📥 Baixando screenshot atualizado do Windows...")
+            print("Baixando screenshot atualizado do Windows...")
             subprocess.run([
                 "scp", "-i", os.path.expanduser("~/.ssh/id_rsa_windows"),
                 "-o", "StrictHostKeyChecking=no",
-                "Aluno@100.86.250.65:C:/Users/Aluno/jarvis_latest_screenshot.png",
-                os.path.join(DOWNLOADS, "jarvis_computer_use_final_screenshot.png")
+                "Aluno@100.86.250.65:C:/Users/Aluno/nexo_latest_screenshot.png",
+                os.path.join(DOWNLOADS, "nexo_computer_use_final_screenshot.png")
             ], capture_output=True)
-            print(f"📁 [Screenshot Salvo]: {os.path.join(DOWNLOADS, 'jarvis_computer_use_final_screenshot.png')}")
+            print(f"[Screenshot Salvo]: {os.path.join(DOWNLOADS, 'nexo_computer_use_final_screenshot.png')}")
 
             print("\n════════════════════════════════════════════════════════════════════")
-            print("🎉 OPERACAO COMPUTER USE + VOZ CONCLUIDA COM SUCESSO!")
+            print("OPERACAO COMPUTER USE + VOZ CONCLUIDA COM SUCESSO!")
             print("════════════════════════════════════════════════════════════════════\n")
         else:
-            print("❌ Nenhum audio recebido.")
+            print("Nenhum audio recebido.")
 
 if __name__ == "__main__":
     asyncio.run(run_cu_benchmark())
