@@ -22,12 +22,31 @@ import subprocess
 from typing import Optional, Dict, Any
 import websockets
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from ia_router import (
+    SYSTEM_PROMPT as IA_SYSTEM_PROMPT,
+    TOOLS_DECLARATION as IA_TOOLS,
+    resolve_gemini_credential,
+    MissingCredentialError,
+)
+
 DAEMON_EXE = os.environ.get(
     "NEXO_DAEMON_EXE",
     r"C:\Users\Aluno\nexo-daemon\target\release\nexo-daemon.exe"
 )
 LIVE_MODEL = os.environ.get("GEMINI_LIVE_MODEL", "models/gemini-2.5-flash-native-audio-latest")
+
+
+def _live_api_key() -> str:
+    """API key via env ou GCP CLI. Sem fallback silencioso."""
+    kind, credential = resolve_gemini_credential()
+    if kind == "apikey":
+        return credential
+    # Live WebSocket exige API key; token Vertex (OAuth) nao autentica este endpoint.
+    raise MissingCredentialError(
+        "Gemini Live exige $env:GEMINI_API_KEY (o token do GCP CLI serve ao "
+        "roteador REST/Vertex, nao ao WebSocket Live). Defina a API key."
+    )
 
 
 def query_host_hardware() -> Dict[str, Any]:
@@ -47,15 +66,33 @@ def query_host_hardware() -> Dict[str, Any]:
     }
 
 
+def query_system_datetime() -> Dict[str, Any]:
+    """Data/hora real do host (fast tool, sem LLM)."""
+    import sys as _sys
+    _sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from cognitive_router import get_system_datetime
+    return get_system_datetime()
+
+
+def query_project_status() -> Dict[str, Any]:
+    """Listagem rápida real do projeto (fast tool, sem AGY)."""
+    import sys as _sys
+    _sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from cognitive_router import list_project_files
+    return list_project_files()
+
+
 async def run_live_session(input_pcm_stream: Optional[bytes] = None, output_wav_path: Optional[str] = None):
-    if not GEMINI_API_KEY:
-        print("[LiveBridge] Erro: GEMINI_API_KEY nao definida no ambiente.")
+    try:
+        gemini_api_key = _live_api_key()
+    except MissingCredentialError as e:
+        print(f"[LiveBridge] Erro: {e}")
         sys.exit(1)
 
     ws_url = (
         f"wss://generativelanguage.googleapis.com/ws/"
         f"google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent"
-        f"?key={GEMINI_API_KEY}"
+        f"?key={gemini_api_key}"
     )
 
     print("==================================================================")
@@ -75,22 +112,10 @@ async def run_live_session(input_pcm_stream: Optional[bytes] = None, output_wav_
                         }
                     }
                 },
-                "tools": [{
-                    "functionDeclarations": [
-                        {
-                            "name": "check_system_hardware",
-                            "description": "Consulta telemetria e inventario de hardware da maquina fisica (CPU, memoria, GPU, discos).",
-                            "parameters": {"type": "OBJECT", "properties": {}}
-                        }
-                    ]
-                }],
+                "tools": IA_TOOLS,
                 "systemInstruction": {
                     "parts": [{
-                        "text": (
-                            "Voce e o assistente de voz do Nexo. "
-                            "Responda de forma concisa e natural em portugues do Brasil por audio. "
-                            "Quando solicitado para checar hardware ou sistema, invoque check_system_hardware."
-                        )
+                        "text": IA_SYSTEM_PROMPT
                     }]
                 }
             }
@@ -137,6 +162,20 @@ async def run_live_session(input_pcm_stream: Optional[bytes] = None, output_wav_
                                 "id": call_id,
                                 "name": fn_name,
                                 "response": {"result": hw_data}
+                            })
+                        elif fn_name == "get_system_datetime":
+                            dt_data = query_system_datetime()
+                            fn_responses.append({
+                                "id": call_id,
+                                "name": fn_name,
+                                "response": {"result": dt_data}
+                            })
+                        elif fn_name == "list_project_files":
+                            proj_data = query_project_status()
+                            fn_responses.append({
+                                "id": call_id,
+                                "name": fn_name,
+                                "response": {"result": proj_data}
                             })
 
                     await ws.send(json.dumps({

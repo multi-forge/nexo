@@ -6,11 +6,13 @@ Simulates an Android client (Galaxy A14 5G) communicating with the Nexo Host:
 1. Receives user text input via CLI or interactive prompt.
 2. Synthesizes user voice (pt-BR-AntonioNeural) and plays it through speakers.
 3. Emulates Oboe C++ 16kHz PCM audio streaming & WireGuard (0x01 / 0x03 framing).
-4. Cognitive Intent Router implementing the 4 Execution Routes:
-   - Rota 1: Diálogo Direto (< 350ms): Saudações, dúvidas, conversa leve (sem ACK de ferramenta!)
-   - Rota 2: Fast Tool (10-100ms): Consulta imediata de hardware/sistema
-   - Rota 3: AGY Task Assíncrona: Tarefas de código com ACK contextual e fila de passos
-   - Rota 4: Computer Use: Automação de interface do Windows
+4. Roteador 100% IA (system prompt + function calling, sem heurística local):
+   - Rota 1: Diálogo Direto: texto da própria IA
+   - Rota 2: Fast Tool: function call da IA -> ferramenta real
+   - Rota 3: AGY Task Assíncrona: function call da IA
+   - Rota 4: Computer Use: function call da IA
+   Credencial: $env:GEMINI_API_KEY ou GCP CLI (`gcloud auth print-access-token`).
+   Sem credencial/sem IA -> erro explícito, nunca resposta local inventada.
 5. Synthesizes and plays Nexo voice responses (pt-BR-FranciscaNeural) through speakers.
 """
 
@@ -40,6 +42,18 @@ except ModuleNotFoundError:
 
 # Paths
 REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT / "orchestrator"))
+from cognitive_router import (
+    execute_fast_tool,
+    contextual_ack,
+    normalize_text,
+)
+from ia_router import (
+    route_via_ia,
+    resolve_gemini_credential,
+    MissingCredentialError,
+    IaRouterError,
+)
 CONFIG_PATH = REPO_ROOT / "orchestrator" / "voice_ux_profile.toml"
 AGY_PATH = os.environ.get("AGY_PATH", r"C:\Users\Aluno\AppData\Local\agy\bin\agy.exe")
 BRAIN_PATH = os.environ.get("BRAIN_PATH", r"C:\Users\Aluno\.gemini\antigravity-cli\brain")
@@ -117,67 +131,33 @@ def generate_earcon_tone(freq: int = 440, duration_ms: int = 80, sample_rate: in
 
 
 def query_host_hardware() -> str:
-    """Queries hardware telemetry from Nexo Daemon or CIM fallback."""
-    if DAEMON_EXE.exists():
-        try:
-            res = subprocess.run([str(DAEMON_EXE), "hardware"], capture_output=True, text=True, check=True, timeout=5)
-            hw = json.loads(res.stdout)
-            return (
-                f"O sistema é um {hw.get('os')} com CPU {hw.get('cpu')}, "
-                f"{hw.get('ram_total_gb')} gigabytes de memória RAM e "
-                f"{hw.get('primary_disk_free_gb')} gigabytes livres em disco."
-            )
-        except Exception:
-            pass
-
+    """Resumo dinâmico via roteador central (fallback determinístico)."""
+    try:
+        result = execute_fast_tool("check_system_hardware")
+        return result.get("spoken", "Sistema operacional ativo.")
+    except Exception:
+        pass
     return "Sistema Windows operacional com 8 gigabytes de RAM e disco rígido saudável."
 
 
 def classify_cognitive_route(prompt: str) -> Tuple[str, Optional[str]]:
     """
-    Cognitive Intent Classifier mapping to the 4 Execution Routes in docs/nexo-event-architecture.md:
-    - ROUTE_1_DIALOGUE: Social greetings, conversational queries, identity questions (<350ms direct speech, NO AGY task)
-    - ROUTE_2_FAST_TOOL: Real-time telemetry / status queries (<100ms)
-    - ROUTE_3_AGY_TASK: Code, repository, and engineering file operations
-    - ROUTE_4_COMPUTER_USE: Desktop / GUI / mouse actions
+    Decisor único: 100% IA via system prompt + function calling.
+    Sem heurística local, sem fallback. A credencial vem de
+    $env:GEMINI_API_KEY ou do GCP CLI (`gcloud auth print-access-token`).
+    Mantém assinatura legada (route, detalhe) para o circuito de voz.
+    Levanta MissingCredentialError/IaRouterError em vez de inventar resposta.
     """
-    clean = prompt.lower().strip().rstrip("?!.,")
-
-    # 1. Social greetings & pleasantries
-    social_greetings = [
-        "ola", "olá", "oi", "tudo bem", "como vai", "bom dia", "boa tarde", "boa noite",
-        "e ai", "e aí", "tudo bom", "fala nexo", "ola nexo", "olá nexo", "oi nexo"
-    ]
-    if clean in social_greetings or any(clean == g for g in social_greetings) or clean.startswith(("olá tudo bem", "ola tudo bem", "oi tudo bem")):
-        return (
-            "ROUTE_1_DIALOGUE",
-            "Olá! Tudo ótimo por aqui. Como posso ajudar você na sua estação de trabalho hoje?"
-        )
-
-    # 2. Identity & Capability questions
-    if any(q in clean for q in ["quem e voce", "quem é você", "qual o seu nome", "o que voce faz", "o que você faz", "quais suas capacidades"]):
-        return (
-            "ROUTE_1_DIALOGUE",
-            "Eu sou o Nexo, seu sistema operacional de engenharia autônoma e copiloto de desenvolvimento por voz."
-        )
-
-    # 3. Polite acknowledgement / farewell
-    if clean in ["obrigado", "valeu", "tchau", "ate mais", "até mais", "perfeito"]:
-        return (
-            "ROUTE_1_DIALOGUE",
-            "Disponha! Estou sempre conectado e à disposição no seu fone de ouvido."
-        )
-
-    # 4. Fast Tool: Hardware & System Status
-    if any(k in clean for k in ["hardware", "memoria", "memória", "cpu", "disco", "status da maquina", "status do pc", "temperatura"]):
-        return ("ROUTE_2_FAST_TOOL", None)
-
-    # 5. Computer Use
-    if any(k in clean for k in ["abra o navegador", "clique no mouse", "screenshot da tela", "tire um print"]):
-        return ("ROUTE_4_COMPUTER_USE", None)
-
-    # 6. Default: Route 3 - AGY Agent Task (Active code / project commands)
-    return ("ROUTE_3_AGY_TASK", None)
+    route, payload = route_via_ia(prompt)
+    if route == "ROUTE_1_DIALOGUE":
+        return (route, payload.get("direct_response"))
+    if route == "ROUTE_2_FAST_TOOL":
+        return (route, payload.get("tool"))
+    if route == "ROUTE_3_AGY_TASK":
+        return (route, payload.get("task"))
+    if route == "ROUTE_4_COMPUTER_USE":
+        return (route, payload.get("action"))
+    return (route, None)
 
 
 class AndroidCircuitSimulator:
@@ -232,9 +212,16 @@ class AndroidCircuitSimulator:
         print(f"     -> Frame 0x03 (Turn Complete / Fim de fala) transmitido ao Nexo Host.")
 
     async def run_nexo_circuit(self, prompt: str):
-        """Phase 3: Cognitive Router executes the appropriate route based on intent."""
-        route, direct_response = classify_cognitive_route(prompt)
-        print(f"\n[3. Roteador Cognitivo Nexo: {route}]")
+        """Fase 3: a IA decide a rota via system prompt + function calling (sem heurística local)."""
+        loop = asyncio.get_running_loop()
+        try:
+            route, direct_response = await loop.run_in_executor(
+                None, classify_cognitive_route, prompt)
+        except (MissingCredentialError, IaRouterError) as e:
+            print(f"\n[3. Roteador IA indisponivel] {e}")
+            print("     -> Sem fallback local por configuracao: informe GEMINI_API_KEY ou `gcloud auth login`.")
+            raise
+        print(f"\n[3. Roteador Cognitivo Nexo (IA): {route}]")
 
         # =====================================================================
         # ROTA 1: DIÁLOGO DIRETO (< 350ms)
@@ -256,29 +243,53 @@ class AndroidCircuitSimulator:
             return
 
         # =====================================================================
-        # ROTA 2: FAST TOOL (Status / Hardware)
+        # ROTA 2: FAST TOOL (Status / Hardware / Data-Hora / Projeto)
         # =====================================================================
         if route == "ROUTE_2_FAST_TOOL":
-            print("     -> Consulta rápida de telemetria acionada.")
+            tool_name = direct_response or "check_system_hardware"
+            print(f"     -> Consulta rápida acionada: {tool_name}.")
             earcon_pcm = generate_earcon_tone(freq=440, duration_ms=80, sample_rate=24000)
             self.audio.play_pcm_tone(earcon_pcm, sample_rate=24000, wait=False)
 
-            # Fast ACK
-            ack_text = "Consultando o sistema."
+            # Fast ACK contextual (Doherty <300ms)
+            ack_text = contextual_ack(route, {"tool": tool_name})
             ack_path = str(self.temp_dir / f"fast_ack_{int(time.time()*1000)}.mp3")
             comm = edge_tts.Communicate(ack_text, self.nexo_voice, rate="+10%")
             await comm.save(ack_path)
             print(f"     -> [FAST ACK]: \"{ack_text}\"")
             self.audio.play_wav_or_mp3(ack_path, wait=True)
 
-            hw_summary = query_host_hardware()
-            resp_path = str(self.temp_dir / f"hw_{int(time.time()*1000)}.mp3")
-            comm = edge_tts.Communicate(hw_summary, self.nexo_voice, rate="+5%")
+            tool_result = execute_fast_tool(tool_name)
+            answer_text = tool_result.get("spoken", "Consulta concluída.")
+            resp_path = str(self.temp_dir / f"fast_{int(time.time()*1000)}.mp3")
+            comm = edge_tts.Communicate(answer_text, self.nexo_voice, rate="+5%")
             await comm.save(resp_path)
 
-            print(f"\n[4. Resposta de Telemetria Concluida]")
-            print(f"     -> [OUVINDO RESPOSTA DO NEXO]: \"{hw_summary}\"\n")
+            print(f"\n[4. Resposta Rápida Concluída ({tool_name})]")
+            print(f"     -> [OUVINDO RESPOSTA DO NEXO]: \"{answer_text}\"\n")
             self.audio.play_wav_or_mp3(resp_path, wait=True)
+            return
+
+        # =====================================================================
+        # ROTA 4: COMPUTER USE (Automação de tela / navegador)
+        # =====================================================================
+        if route == "ROUTE_4_COMPUTER_USE":
+            print("     -> Automação de interface identificada. Despachando Computer Use.")
+            earcon_pcm = generate_earcon_tone(freq=440, duration_ms=80, sample_rate=24000)
+            self.audio.play_pcm_tone(earcon_pcm, sample_rate=24000, wait=True)
+            ack_text = contextual_ack(route, {"action": prompt})
+            ack_path = str(self.temp_dir / f"cu_ack_{int(time.time()*1000)}.mp3")
+            comm = edge_tts.Communicate(ack_text, self.nexo_voice, rate="+10%")
+            await comm.save(ack_path)
+            print(f"     -> [DOHERTY / TURN-TAKING ACK]: \"{ack_text}\"")
+            self.audio.play_wav_or_mp3(ack_path, wait=True)
+            final_text = f"Automacao de tela iniciada: {prompt}"
+            final_path = str(self.temp_dir / f"cu_final_{int(time.time()*1000)}.mp3")
+            comm = edge_tts.Communicate(final_text, self.nexo_voice, rate="+5%")
+            await comm.save(final_path)
+            print(f"\n[4. Resposta Computer Use Despachada]")
+            print(f"     -> [OUVINDO RESPOSTA DO NEXO]: \"{final_text}\"\n")
+            self.audio.play_wav_or_mp3(final_path, wait=True)
             return
 
         # =====================================================================
@@ -292,7 +303,7 @@ class AndroidCircuitSimulator:
         self.audio.play_pcm_tone(earcon_pcm, sample_rate=24000, wait=True)
 
         # 2. Contextual ACK (<300ms Doherty Threshold)
-        ack_text = "Entendido. Iniciando a tarefa no projeto."
+        ack_text = contextual_ack("ROUTE_3_AGY_TASK", {"task": prompt})
         ack_path = str(self.temp_dir / f"ack_{int(time.time()*1000)}.mp3")
         comm = edge_tts.Communicate(ack_text, self.nexo_voice, rate="+10%")
         await comm.save(ack_path)
@@ -394,17 +405,13 @@ class AndroidCircuitSimulator:
             if not agent_finished:
                 final_text = "Tarefa concluida com sucesso no ambiente host."
         else:
-            # Contingency engineering path
-            print("[Despachante] Executando passos de engenharia em contingencia...")
-            await asyncio.sleep(0.5)
-            cue_msg = "Inspecionando os modulos do projeto."
-            cue_path = str(self.temp_dir / f"cue_0_{int(time.time()*1000)}.mp3")
-            comm = edge_tts.Communicate(cue_msg, self.nexo_voice, rate="+10%")
-            await comm.save(cue_path)
-            print(f"     -> [FILA DINAMICA / MASCARAMENTO]: \"{cue_msg}\"")
-            self.audio.play_wav_or_mp3(cue_path, wait=True)
-
-            final_text = "Verificacao concluida. Os modulos estao ativos e operando normalmente."
+            # Sem invencao local: se o agente de engenharia nao esta disponivel,
+            # informa o fato em vez de simular sucesso.
+            print("[Despachante] Agente de engenharia indisponivel; sem fallback local.")
+            final_text = (
+                f"Nao consegui iniciar a tarefa {prompt} "
+                f"porque o agente de engenharia nao esta disponivel no host."
+            )
 
         # 5. Deliver Final Response (Buffer Flush + Summary)
         final_summary = final_text.split("\n")[0].strip()
@@ -437,10 +444,11 @@ async def main():
     print("================================================================================")
     print("      NEXO MOBILE - SIMULADOR CLI DE CLIENTE ANDROID (OBOE C++ / WIREGUARD)     ")
     print("================================================================================")
-    print("Roteamento Cognitivo Inteligente (4 Rotas):")
-    print("  • Rota 1 (Diálogo Direto): 'olá tudo bem?', 'quem é você?' -> Fala instantânea (<350ms)")
-    print("  • Rota 2 (Fast Tool):      'como está o hardware?', 'memória?' -> Telemetria imediata")
-    print("  • Rota 3 (AGY Task):       'liste os arquivos', 'leia o README' -> Fila dinâmica de passos")
+    print("Roteamento 100% IA (system prompt + function calling, sem fallback local):")
+    print("  • Rota 1 (Diálogo): texto direto da IA")
+    print("  • Rota 2 (Fast Tool): function call da IA -> ferramenta real")
+    print("  • Rota 3 (AGY Task): function call da IA")
+    print("  • Rota 4 (Computer Use): function call da IA")
     print("================================================================================\n")
 
     if len(sys.argv) > 1:

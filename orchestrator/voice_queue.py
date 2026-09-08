@@ -287,7 +287,8 @@ async def execute_task_with_voice_masking(prompt: str):
         await asyncio.sleep(2.8)
         if config.flush_on_finish:
             queue.flush()
-        await queue.push_cue("Tudo concluido com sucesso.", priority=0)
+        short_task = prompt[:80] if len(prompt) > 80 else prompt
+        await queue.push_cue(f"Tarefa recebida: {short_task}.", priority=0)
         queue.running = False
         await player_task
         return

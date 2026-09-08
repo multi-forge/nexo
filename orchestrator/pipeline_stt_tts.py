@@ -29,8 +29,8 @@ DAEMON_EXE = os.environ.get(
     r"C:\Users\Aluno\nexo-daemon\target\release\nexo-daemon.exe"
 )
 
-PRIMARY_LLM = "gemini-3.5-flash-lite"
-FALLBACK_LLM = "gemini-3.1-flash-lite"
+PRIMARY_LLM = os.environ.get("NEXO_IA_MODEL", "gemini-2.5-flash-lite")
+FALLBACK_LLM = os.environ.get("NEXO_IA_FALLBACK_MODEL", "gemini-2.5-flash")
 
 
 def get_gcloud_token() -> Optional[str]:
@@ -120,44 +120,38 @@ def transcribe_audio_gemini(wav_path: str) -> Optional[str]:
 
 
 def dispatch_llm_orchestrator(transcription: str) -> Dict[str, Any]:
-    """Interprets intent and dispatches tool calls using Gemini Flash-Lite."""
-    tools_declaration = [{
-        "functionDeclarations": [
-            {
-                "name": "check_hardware",
-                "description": "Consulta inventario de hardware do PC (CPU, RAM, GPU, Armazenamento, OS).",
-                "parameters": {"type": "OBJECT", "properties": {}}
-            },
-            {
-                "name": "set_volume",
-                "description": "Ajusta o volume do sistema do host.",
-                "parameters": {
-                    "type": "OBJECT",
-                    "properties": {
-                        "steps": {"type": "INTEGER", "description": "Passos de volume (+/-)"}
-                    },
-                    "required": ["steps"]
-                }
-            }
-        ]
-    }]
+    """A IA decide via system prompt canonico + function calling (sem heuristica local)."""
+    import sys as _sys
+    _sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from ia_router import SYSTEM_PROMPT, TOOLS_DECLARATION, resolve_gemini_credential
 
-    system_instruction = (
-        "Voce e o orquestrador do Nexo. Se o usuario pedir informacoes do computador, hardware, memoria ou disco, "
-        "invoque a tool check_hardware. Seja objetivo."
-    )
+    try:
+        kind, credential = resolve_gemini_credential()
+    except Exception as e:
+        print(f"[Pipeline:LLM] Sem credencial IA: {e}")
+        raise
+
+    system_instruction = SYSTEM_PROMPT
 
     for model in [PRIMARY_LLM, FALLBACK_LLM]:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
+        if kind == "apikey":
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={credential}"
+            headers = {"Content-Type": "application/json"}
+        else:
+            url = (f"https://us-central1-aiplatform.googleapis.com/v1/projects/"
+                   f"{GCP_PROJECT_ID}/locations/us-central1/publishers/google/"
+                   f"models/{model}:generateContent")
+            headers = {"Content-Type": "application/json",
+                       "Authorization": f"Bearer {credential}"}
         payload = {
             "systemInstruction": {"parts": [{"text": system_instruction}]},
-            "contents": [{"parts": [{"text": transcription}]}],
-            "tools": tools_declaration
+            "contents": [{"role": "user", "parts": [{"text": transcription}]}],
+            "tools": TOOLS_DECLARATION
         }
         req = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"}
+            headers=headers
         )
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
@@ -166,7 +160,7 @@ def dispatch_llm_orchestrator(transcription: str) -> Dict[str, Any]:
             print(f"[Pipeline:LLM] Modelo {model} indisponivel: {e}")
             continue
 
-    return {}
+    raise RuntimeError("IA indisponivel em todos os modelos. Sem fallback local.")
 
 
 async def synthesize_speech_edge(text: str, output_path: str):
@@ -245,7 +239,7 @@ async def run_pipeline(input_audio_path: str):
     if "functionCall" in part:
         fn_name = part["functionCall"]["name"]
         print(f"[Pipeline] Tool Call detectada: {fn_name}")
-        if fn_name == "check_hardware":
+        if fn_name in ("check_hardware", "check_system_hardware"):
             if os.path.exists(DAEMON_EXE):
                 res = subprocess.run([DAEMON_EXE, "hardware"], capture_output=True, text=True, check=True)
                 hw = json.loads(res.stdout)
@@ -256,6 +250,16 @@ async def run_pipeline(input_audio_path: str):
                 )
             else:
                 summary = "Hardware verificado: sistema operacional ativo com disco e memoria saudaveis."
+        elif fn_name == "get_system_datetime":
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from cognitive_router import get_system_datetime
+            summary = get_system_datetime()["spoken"]
+        elif fn_name == "list_project_files":
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from cognitive_router import list_project_files
+            summary = list_project_files()["spoken"]
+        else:
+            raise RuntimeError(f"Tool desconhecida retornada pela IA: {fn_name}. Sem fallback local.")
     else:
         summary = part.get("text", "Comando processado com sucesso.")
 
