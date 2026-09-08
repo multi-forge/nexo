@@ -28,7 +28,6 @@ import asyncio
 import subprocess
 import urllib.request
 import json
-import hashlib
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
 
@@ -316,8 +315,6 @@ class AndroidCircuitSimulator:
         self.nexo_voice = "pt-BR-FranciscaNeural"     # Female voice for Nexo assistant
         self.temp_dir = REPO_ROOT / "client-mobile" / "temp_audio"
         self.temp_dir.mkdir(exist_ok=True)
-        self.ack_cache_dir = self.temp_dir / "ack_cache"
-        self.ack_cache_dir.mkdir(parents=True, exist_ok=True)
         self.conversation_history: List[Dict[str, Any]] = []
 
         # Load psychology timing configurations
@@ -341,17 +338,6 @@ class AndroidCircuitSimulator:
         if len(words) > self.max_words:
             return " ".join(words[:self.max_words]) + "..."
         return text
-
-    async def get_cached_ack_audio(self, text: str) -> str:
-        """Retorna o audio do ACK do cache local em <5ms (ou sintetiza uma vez se inexistente)."""
-        self.ack_cache_dir.mkdir(parents=True, exist_ok=True)
-        h = hashlib.md5(f"{self.nexo_voice}:{text}".encode("utf-8")).hexdigest()[:12]
-        cache_path = self.ack_cache_dir / f"ack_{h}.mp3"
-        if cache_path.exists() and cache_path.stat().st_size > 200:
-            return str(cache_path)
-        comm = edge_tts.Communicate(text, self.nexo_voice, rate="+0%")
-        await comm.save(str(cache_path))
-        return str(cache_path)
 
     async def speak_user_input(self, text: str, force_tts: bool = False):
         """Fase 1: Entrada de fala do usuario no microfone do Android."""
@@ -424,9 +410,11 @@ class AndroidCircuitSimulator:
             tool_name = direct_response or "check_system_hardware"
             print(f"     -> Consulta rápida acionada: {tool_name}.")
 
-            # Fast ACK contextual carregado do cache local (<5ms)
+            # Fast ACK contextual sintetizado dinamicamente via nuvem
             ack_text = contextual_ack(route, {"tool": tool_name})
-            ack_path = await self.get_cached_ack_audio(ack_text)
+            ack_path = str(self.temp_dir / f"fast_ack_{int(time.time()*1000)}.mp3")
+            comm = edge_tts.Communicate(ack_text, self.nexo_voice, rate="+0%")
+            await comm.save(ack_path)
             print(f"     -> [FAST ACK]: \"{ack_text}\"")
 
             # 1. Inicia áudio do ACK de imediato (não-bloqueante)
@@ -459,10 +447,12 @@ class AndroidCircuitSimulator:
         if route == "ROUTE_4_COMPUTER_USE":
             print("     -> Automação de interface identificada. Despachando Computer Use.")
             ack_text = contextual_ack(route, {"action": prompt})
-            ack_path = await self.get_cached_ack_audio(ack_text)
+            ack_path = str(self.temp_dir / f"cu_ack_{int(time.time()*1000)}.mp3")
+            comm = edge_tts.Communicate(ack_text, self.nexo_voice, rate="+0%")
+            await comm.save(ack_path)
             print(f"     -> [DOHERTY / TURN-TAKING ACK]: \"{ack_text}\"")
 
-            # 1. Inicia áudio do ACK do cache de imediato
+            # 1. Inicia áudio do ACK de imediato
             self.audio.play_wav_or_mp3(ack_path, wait=False)
 
             # 2. PIPELINING: Executa ação visual e sintetiza áudio de conclusão em paralelo
@@ -494,9 +484,11 @@ class AndroidCircuitSimulator:
         # =====================================================================
         print("     -> Tarefa técnica identificada. Executando ação no host.")
 
-        # 1. Contextual ACK (<5ms via disco) tocando de imediato
+        # 1. Contextual ACK sintetizado dinamicamente via nuvem
         ack_text = contextual_ack("ROUTE_3_AGY_TASK", {"task": prompt})
-        ack_path = await self.get_cached_ack_audio(ack_text)
+        ack_path = str(self.temp_dir / f"ack_{int(time.time()*1000)}.mp3")
+        comm = edge_tts.Communicate(ack_text, self.nexo_voice, rate="+0%")
+        await comm.save(ack_path)
         print(f"     -> [DOHERTY / TURN-TAKING ACK]: \"{ack_text}\"")
         self.audio.play_wav_or_mp3(ack_path, wait=False)
 
@@ -533,14 +525,13 @@ class AndroidCircuitSimulator:
         return
 
     def cleanup(self):
-        """Removes temporary session audio files, preserving persistent ack_cache."""
+        """Remove todos os arquivos temporarios de audio da sessao (sem persistencia local)."""
         if self.temp_dir.exists():
-            for f in self.temp_dir.iterdir():
-                if f.is_file() and f.suffix == ".mp3":
-                    try:
-                        f.unlink()
-                    except Exception:
-                        pass
+            for f in self.temp_dir.glob("*.mp3"):
+                try:
+                    f.unlink()
+                except Exception:
+                    pass
 
 
 async def main():

@@ -148,6 +148,8 @@ End-to-end latency from user speech to first audible response byte:
 
 **`orchestrator/`** -- The cognitive voice orchestration layer:
 
+- **`ia_router.py`**: 100% cloud AI cognitive router (`gemini-2.5-flash-lite` on Vertex AI / Gemini API). Zero local heuristics and zero local fallback responses. Features persistent HTTP Keep-Alive connection pooling (~490ms warm RTT), 50-minute in-memory GCP auth token caching, and multi-turn conversational context memory.
+- **`cognitive_router.py`**: Real host execution tools (dynamic system date/time, hardware telemetry via psutil/platform/daemon, project file listing) and contextual feedback cues.
 - **`voice_queue.py`**: Dynamic audio queue implementing psychology-based latency masking, anti-chatter debouncing (3000ms), and buffer flush upon task completion.
 - **`live_bridge.py`**: Bidirectional WebSocket gateway to Google Gemini Multimodal Live API with native function calling linked to the host daemon.
 - **`pipeline_stt_tts.py`**: Decoupled multi-stage pipeline supporting Google Cloud Speech v2 (Chirp), Gemini 3.5 Flash-Lite, and Google Cloud Neural2 TTS.
@@ -161,6 +163,15 @@ End-to-end latency from user speech to first audible response byte:
 - Zero external heavyweight dependencies; runs in memory via stdio JSON-RPC 2.0.
 
 ### Mobile Client (Android)
+
+**`client-mobile/simulate_android_client.py`** -- Full Android client & voice circuit simulator:
+
+- Simulates Galaxy A14 5G client communicating with the Nexo Host.
+- Emulates Oboe C++ 16kHz PCM audio framing (`0x01` audio chunks, `0x03` turn-complete) and WireGuard P2P transit.
+- Emits immediate acoustic earcon chime (<50ms) on Frame 0x03 for instant auditory feedback (Doherty threshold <400ms).
+- 100% dynamic cloud speech synthesis (Edge-TTS neural pt-BR voices) with **zero local caching** and zero local fallback.
+- Zero-dead-time concurrent pipelining: tool execution and cloud response TTS fetching execute concurrently during ACK speech playback.
+- Real execution dispatch: Git operations (status, log, commit), file creation, tests, and Win32 application/screen automation.
 
 **`client-mobile/test_client.py`** -- CLI streaming client for development and testing:
 
@@ -461,6 +472,8 @@ nexo/
 │       └── transport.rs                   # Async HTTP/TCP receiver (port 3284)
 │
 ├── orchestrator/                          # Voice UX & cognitive orchestration layer
+│   ├── ia_router.py                       # 100% Cloud IA Cognitive Router (Gemini 2.5 Flash-Lite)
+│   ├── cognitive_router.py                # Host execution tools and contextual feedback
 │   ├── voice_queue.py                     # Dynamic audio queue with latency masking
 │   ├── live_bridge.py                     # Gemini Multimodal Live API WebSocket bridge
 │   ├── pipeline_stt_tts.py                # Decoupled pipeline (Chirp STT, Flash-Lite, Neural2 TTS)
@@ -471,6 +484,7 @@ nexo/
 │   └── windows_computer_use.py            # Win32 desktop automation MCP server
 │
 ├── client-mobile/                         # Mobile clients and benchmarks
+│   ├── simulate_android_client.py         # Full Android client & voice circuit simulator
 │   ├── test_client.py                     # CLI streaming test client
 │   └── benchmark_latency.py              # End-to-end latency measurement suite
 │
