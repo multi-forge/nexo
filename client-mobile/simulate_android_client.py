@@ -97,7 +97,7 @@ class AudioEngine:
                 while (time.perf_counter() - t0) < dur:
                     time.sleep(0.04)
                 # Hardware DAC drain buffer to ensure the final phoneme/syllable vibrates the speakers
-                time.sleep(0.35)
+                time.sleep(0.08)
         except Exception as e:
             print(f"[AudioEngine] Erro na reproducao: {e}")
 
@@ -140,15 +140,18 @@ def query_host_hardware() -> str:
     return "Sistema Windows operacional com 8 gigabytes de RAM e disco rígido saudável."
 
 
-def classify_cognitive_route(prompt: str) -> Tuple[str, Optional[str]]:
+def classify_cognitive_route(
+    prompt: str,
+    history: Optional[List[Dict[str, Any]]] = None,
+) -> Tuple[str, Optional[str]]:
     """
     Decisor único: 100% IA via system prompt + function calling.
     Sem heurística local, sem fallback. A credencial vem de
     $env:GEMINI_API_KEY ou do GCP CLI (`gcloud auth print-access-token`).
-    Mantém assinatura legada (route, detalhe) para o circuito de voz.
+    Mantém assinatura (route, detalhe) e suporta histórico de diálogo.
     Levanta MissingCredentialError/IaRouterError em vez de inventar resposta.
     """
-    route, payload = route_via_ia(prompt)
+    route, payload = route_via_ia(prompt, conversation_history=history)
     if route == "ROUTE_1_DIALOGUE":
         return (route, payload.get("direct_response"))
     if route == "ROUTE_2_FAST_TOOL":
@@ -167,6 +170,7 @@ class AndroidCircuitSimulator:
         self.nexo_voice = "pt-BR-FranciscaNeural"     # Female voice for Nexo assistant
         self.temp_dir = REPO_ROOT / "client-mobile" / "temp_audio"
         self.temp_dir.mkdir(exist_ok=True)
+        self.conversation_history: List[Dict[str, Any]] = []
 
         # Load psychology timing configurations
         self.min_gap_ms = 3000
@@ -194,7 +198,7 @@ class AndroidCircuitSimulator:
         """Phase 1: Synthesize and play the user speaking into the Android microphone."""
         user_audio_path = str(self.temp_dir / f"user_{int(time.time()*1000)}.mp3")
         print(f"\n[1. Smartphone Microfone] Sintetizando sua fala ({self.user_voice})...")
-        comm = edge_tts.Communicate(text, self.user_voice, rate="+0%")
+        comm = edge_tts.Communicate(text, self.user_voice, rate="+15%")
         await comm.save(user_audio_path)
 
         print(f"     -> [OUVINDO FALA DO USUARIO]: \"{text}\"")
@@ -212,11 +216,12 @@ class AndroidCircuitSimulator:
         print(f"     -> Frame 0x03 (Turn Complete / Fim de fala) transmitido ao Nexo Host.")
 
     async def run_nexo_circuit(self, prompt: str):
-        """Fase 3: a IA decide a rota via system prompt + function calling (sem heurística local)."""
+        """Fase 3: a IA decide a rota via system prompt + function calling com histórico conversacional."""
+        t_start = time.perf_counter()
         loop = asyncio.get_running_loop()
         try:
             route, direct_response = await loop.run_in_executor(
-                None, classify_cognitive_route, prompt)
+                None, lambda: classify_cognitive_route(prompt, self.conversation_history))
         except (MissingCredentialError, IaRouterError) as e:
             print(f"\n[3. Roteador IA indisponivel] {e}")
             print("     -> Sem fallback local por configuracao: informe GEMINI_API_KEY ou `gcloud auth login`.")
@@ -224,7 +229,7 @@ class AndroidCircuitSimulator:
         print(f"\n[3. Roteador Cognitivo Nexo (IA): {route}]")
 
         # =====================================================================
-        # ROTA 1: DIÁLOGO DIRETO (< 350ms)
+        # ROTA 1: DIÁLOGO DIRETO
         # =====================================================================
         if route == "ROUTE_1_DIALOGUE":
             print("     -> Intenção conversacional identificada. Resposta direta imediata.")
@@ -232,13 +237,16 @@ class AndroidCircuitSimulator:
             earcon_pcm = generate_earcon_tone(freq=520, duration_ms=40, sample_rate=24000)
             self.audio.play_pcm_tone(earcon_pcm, sample_rate=24000, wait=False)
 
-            answer_text = direct_response or "Estou aqui. O que deseja realizar?"
+            answer_text = direct_response or "Estou aqui. Em que posso ajudar você?"
             resp_path = str(self.temp_dir / f"dialogue_{int(time.time()*1000)}.mp3")
             comm = edge_tts.Communicate(answer_text, self.nexo_voice, rate="+10%")
             await comm.save(resp_path)
 
-            print(f"\n[4. Resposta Direta Concluida (<350ms)]")
+            elapsed_ms = (time.perf_counter() - t_start) * 1000
+            print(f"\n[4. Resposta Direta Concluida ({elapsed_ms:.0f}ms)]")
             print(f"     -> [OUVINDO RESPOSTA DO NEXO]: \"{answer_text}\"\n")
+            self.conversation_history.append({"role": "user", "parts": [{"text": prompt}]})
+            self.conversation_history.append({"role": "model", "parts": [{"text": answer_text}]})
             self.audio.play_wav_or_mp3(resp_path, wait=True)
             return
 
@@ -265,8 +273,11 @@ class AndroidCircuitSimulator:
             comm = edge_tts.Communicate(answer_text, self.nexo_voice, rate="+5%")
             await comm.save(resp_path)
 
-            print(f"\n[4. Resposta Rápida Concluída ({tool_name})]")
+            elapsed_ms = (time.perf_counter() - t_start) * 1000
+            print(f"\n[4. Resposta Rápida Concluída ({tool_name} em {elapsed_ms:.0f}ms)]")
             print(f"     -> [OUVINDO RESPOSTA DO NEXO]: \"{answer_text}\"\n")
+            self.conversation_history.append({"role": "user", "parts": [{"text": prompt}]})
+            self.conversation_history.append({"role": "model", "parts": [{"text": answer_text}]})
             self.audio.play_wav_or_mp3(resp_path, wait=True)
             return
 
@@ -287,8 +298,11 @@ class AndroidCircuitSimulator:
             final_path = str(self.temp_dir / f"cu_final_{int(time.time()*1000)}.mp3")
             comm = edge_tts.Communicate(final_text, self.nexo_voice, rate="+5%")
             await comm.save(final_path)
-            print(f"\n[4. Resposta Computer Use Despachada]")
+            elapsed_ms = (time.perf_counter() - t_start) * 1000
+            print(f"\n[4. Resposta Computer Use Despachada ({elapsed_ms:.0f}ms)]")
             print(f"     -> [OUVINDO RESPOSTA DO NEXO]: \"{final_text}\"\n")
+            self.conversation_history.append({"role": "user", "parts": [{"text": prompt}]})
+            self.conversation_history.append({"role": "model", "parts": [{"text": final_text}]})
             self.audio.play_wav_or_mp3(final_path, wait=True)
             return
 
@@ -423,8 +437,11 @@ class AndroidCircuitSimulator:
         comm = edge_tts.Communicate(final_summary, self.nexo_voice, rate="+5%")
         await comm.save(final_path)
 
-        print(f"\n[4. Resposta Final Concluida (Queue Flush)]")
+        elapsed_ms = (time.perf_counter() - t_start) * 1000
+        print(f"\n[4. Resposta Final Concluida (Queue Flush em {elapsed_ms:.0f}ms)]")
         print(f"     -> [OUVINDO RESPOSTA DO NEXO]: \"{final_summary}\"\n")
+        self.conversation_history.append({"role": "user", "parts": [{"text": prompt}]})
+        self.conversation_history.append({"role": "model", "parts": [{"text": final_summary}]})
         self.audio.play_wav_or_mp3(final_path, wait=True)
 
     def cleanup(self):
@@ -445,10 +462,11 @@ async def main():
     print("      NEXO MOBILE - SIMULADOR CLI DE CLIENTE ANDROID (OBOE C++ / WIREGUARD)     ")
     print("================================================================================")
     print("Roteamento 100% IA (system prompt + function calling, sem fallback local):")
-    print("  • Rota 1 (Diálogo): texto direto da IA")
+    print("  • Rota 1 (Diálogo): texto contextual direto da IA com memória de sessão")
     print("  • Rota 2 (Fast Tool): function call da IA -> ferramenta real")
     print("  • Rota 3 (AGY Task): function call da IA")
     print("  • Rota 4 (Computer Use): function call da IA")
+    print("Comandos especiais: 'limpar' para reiniciar memória, 'sair' para encerrar.")
     print("================================================================================\n")
 
     if len(sys.argv) > 1:
@@ -468,6 +486,10 @@ async def main():
             if user_text.lower() in ["sair", "exit", "quit"]:
                 print("\nEncerrando simulador Android. Ate logo!")
                 break
+            if user_text.lower() in ["limpar", "reset", "novo", "clear"]:
+                simulator.conversation_history.clear()
+                print("\n[Memoria de conversa reiniciada. Nova sessao limpa.]")
+                continue
 
             await simulator.speak_user_input(user_text)
             simulator.simulate_network_framing(user_text)

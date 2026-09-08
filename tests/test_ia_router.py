@@ -203,3 +203,44 @@ def test_route_empty_candidates_raises(monkeypatch):
                 pass
             else:
                 raise AssertionError("candidates vazio deveria levantar IaRouterError")
+
+
+def test_route_includes_conversation_history(monkeypatch):
+    captured_payload = {}
+
+    def fake_urlopen(req, timeout=15):
+        captured_payload.update(json.loads(req.data.decode("utf-8")))
+        return _FakeResp(_text_response("Tudo bem!"))
+
+    history = [
+        {"role": "user", "parts": [{"text": "oi"}]},
+        {"role": "model", "parts": [{"text": "Ola!"}]},
+    ]
+    with _patch_credential(monkeypatch):
+        with patch.object(ia.urllib.request, "urlopen", side_effect=fake_urlopen):
+            route, payload = route_via_ia("nao tenho certeza ainda", conversation_history=history)
+            assert route == "ROUTE_1_DIALOGUE"
+            assert len(captured_payload["contents"]) == 3
+            assert captured_payload["contents"][0]["parts"][0]["text"] == "oi"
+            assert captured_payload["contents"][2]["parts"][0]["text"] == "nao tenho certeza ainda"
+
+
+def test_gcloud_token_caching(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    # reset cache
+    ia._CACHED_GCLOUD_TOKEN = None
+    ia._CACHED_TOKEN_EXPIRY = 0.0
+
+    call_count = 0
+
+    def fake_subprocess_run(*a, **kw):
+        nonlocal call_count
+        call_count += 1
+        return MagicMock(stdout="token-123\n")
+
+    with patch("subprocess.run", side_effect=fake_subprocess_run):
+        tok1 = ia._gcloud_access_token()
+        tok2 = ia._gcloud_access_token()
+        assert tok1 == "token-123"
+        assert tok2 == "token-123"
+        assert call_count == 1, "Token deve vir do cache na segunda chamada"

@@ -14,10 +14,11 @@ Credencial (nesta ordem, sem exceções silenciosas):
 
 import json
 import os
+import time
 import subprocess
 import urllib.request
 import urllib.error
-from typing import Dict, Any, Tuple, Optional
+from typing import Dict, Any, Tuple, Optional, List
 
 GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "stt-465818")
 GCP_LOCATION = os.environ.get("GCP_LOCATION", "us-central1")
@@ -38,22 +39,22 @@ class IaRouterError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 SYSTEM_PROMPT = (
-    "Voce e o Nexo, copiloto de engenharia por voz. Responda sempre em "
-    "portugues do Brasil, de forma concisa e natural (maximo 25 palavras), "
-    "sem ecoar a fala do usuario e sem frases roboticas como 'Entendi: ...'. "
-    "Voce decide a proxima acao EXCLUSIVAMENTE via function calling:\n"
-    "- Perguntas de data, hora, dia, relogio ou calendario -> get_system_datetime.\n"
-    "- Hardware, memoria, CPU, disco, temperatura ou status do sistema -> check_system_hardware.\n"
-    "- Arquivos, modulos, estrutura do projeto, branch ou git status -> list_project_files.\n"
-    "- Criar, refatorar, corrigir, implementar, testar ou commitar codigo -> start_agy_task.\n"
-    "- Abrir navegador, clicar, digitar na tela, screenshot ou automacao visual -> computer_use_action.\n"
-    "- Saudacao, identidade, agradecimento, ajuda, risada ('kk'), vagueza "
-    "('nem sei', 'nao fez sentido', 'como assim') ou qualquer fala sem "
-    "intencao acionavel -> responda DIRETO com texto curto e acolhedor que "
-    "ofereca hora, sistema, projeto ou tela como opcoes. Nunca repita a fala "
-    "crua do usuario.\n"
-    "Nunca invente data, hora, hardware ou arquivos: invoque a tool e use o "
-    "resultado real retornado."
+    "Voce e o Nexo, copiloto de engenharia e assistente por voz para desenvolvedores. "
+    "Responda sempre em portugues do Brasil de forma concisa, fluida e natural (ideal para audio: "
+    "1 a 2 frases curtas, maximo 25 palavras), sem ecoar a fala do usuario e sem frases roboticas. "
+    "Nao seja um robo que repete menus ou opções fixas: converse como um parceiro de trabalho humano, prestativo e inteligente.\n"
+    "Suas regras de acao:\n"
+    "1. Invoque tools EXCLUSIVAMENTE quando houver intencao real de execucao:\n"
+    "   - get_system_datetime: para perguntas sobre hora, data, dia, relogio ou calendario.\n"
+    "   - check_system_hardware: para perguntas sobre memoria, CPU, disco, hardware ou telemetria do sistema.\n"
+    "   - list_project_files: para perguntas sobre arquivos, modulos ou estrutura do projeto.\n"
+    "   - start_agy_task: para criar, editar, refatorar ou testar codigo.\n"
+    "   - computer_use_action: para abrir navegador, clicar ou automacao de tela.\n"
+    "2. Para qualquer dialogo conversacional (saudacoes, duvidas, hesitacoes como 'nao sei ainda', "
+    "despedidas, agradecimentos, confirmacoes ou negacoes como 'nenhum', 'nada nao', 'deixa quieto'): "
+    "responda de forma contextual, amigavel e humana. Nunca recite listas de opcoes ou comandos a menos "
+    "que o usuario pergunte expressamente o que voce pode fazer. Se o usuario recusar ou hesitar, acolha de forma leve e deixe-o a vontade.\n"
+    "3. Nunca invente data, hora, hardware ou arquivos: invoque a tool e use o resultado real retornado."
 )
 
 TOOLS_DECLARATION = [{
@@ -131,8 +132,17 @@ def map_function_call_to_route(fn_name: str, args: Optional[Dict[str, Any]] = No
 # Credencial: env -> GCP CLI -> erro explícito
 # ---------------------------------------------------------------------------
 
+_CACHED_GCLOUD_TOKEN: Optional[str] = None
+_CACHED_TOKEN_EXPIRY: float = 0.0
+
+
 def _gcloud_access_token() -> Optional[str]:
-    """Tenta `gcloud auth print-access-token` (Windows: gcloud.cmd)."""
+    """Tenta `gcloud auth print-access-token` (Windows: gcloud.cmd) com cache de 50 minutos."""
+    global _CACHED_GCLOUD_TOKEN, _CACHED_TOKEN_EXPIRY
+    now = time.time()
+    if _CACHED_GCLOUD_TOKEN and now < _CACHED_TOKEN_EXPIRY:
+        return _CACHED_GCLOUD_TOKEN
+
     candidates = (["gcloud.cmd", "auth", "print-access-token"]
                   if os.name == "nt"
                   else ["gcloud", "auth", "print-access-token"])
@@ -140,9 +150,13 @@ def _gcloud_access_token() -> Optional[str]:
         res = subprocess.run(candidates, capture_output=True, text=True,
                              check=True, timeout=10)
         token = res.stdout.strip()
-        return token or None
+        if token:
+            _CACHED_GCLOUD_TOKEN = token
+            _CACHED_TOKEN_EXPIRY = now + 3000.0  # 50 min
+            return token
     except Exception:
-        return None
+        pass
+    return None
 
 
 def resolve_gemini_credential() -> Tuple[str, str]:
@@ -198,9 +212,14 @@ def _parse_gemini_response(data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
     raise IaRouterError("IA retornou parts sem texto nem functionCall.")
 
 
-def route_via_ia(prompt: str, timeout: int = 15) -> Tuple[str, Dict[str, Any]]:
+def route_via_ia(
+    prompt: str,
+    conversation_history: Optional[List[Dict[str, Any]]] = None,
+    timeout: int = 15,
+) -> Tuple[str, Dict[str, Any]]:
     """
     Roteia 100% via IA. Sem heurística local.
+    Suporta histórico de conversa (multi-turn) para manter contexto e coerência.
     Qualquer falha de credencial/rede/modelo propaga exceção (sem fallback).
     """
     kind, credential = resolve_gemini_credential()
@@ -216,6 +235,12 @@ def route_via_ia(prompt: str, timeout: int = 15) -> Tuple[str, Dict[str, Any]]:
         if m and m not in models:
             models.append(m)
 
+    # Constrói histórico multi-turn se fornecido (mantendo os últimos 8 turnos para baixa latência)
+    contents = []
+    if conversation_history:
+        contents.extend(conversation_history[-8:])
+    contents.append({"role": "user", "parts": [{"text": prompt}]})
+
     last_err: Optional[Exception] = None
     for model in models:
         if kind == "apikey":
@@ -230,7 +255,7 @@ def route_via_ia(prompt: str, timeout: int = 15) -> Tuple[str, Dict[str, Any]]:
                        "Authorization": f"Bearer {credential}"}
         payload = {
             "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "contents": contents,
             "tools": TOOLS_DECLARATION,
         }
         try:
