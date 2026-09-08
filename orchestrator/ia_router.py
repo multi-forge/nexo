@@ -44,17 +44,15 @@ SYSTEM_PROMPT = (
     "1 a 2 frases curtas, maximo 25 palavras), sem ecoar a fala do usuario e sem frases roboticas. "
     "Nao seja um robo que repete menus ou opções fixas: converse como um parceiro de trabalho humano, prestativo e inteligente.\n"
     "Suas regras de acao:\n"
-    "1. Invoque tools EXCLUSIVAMENTE quando houver intencao real de execucao:\n"
+    "1. SEMPRE que o usuario pedir para realizar uma acao, tarefa, comando ou consulta, invoque a tool correspondente:\n"
     "   - get_system_datetime: para perguntas sobre hora, data, dia, relogio ou calendario.\n"
-    "   - check_system_hardware: para perguntas sobre memoria, CPU, disco, hardware ou telemetria do sistema.\n"
-    "   - list_project_files: para perguntas sobre arquivos, modulos ou estrutura do projeto.\n"
-    "   - start_agy_task: para criar, editar, refatorar ou testar codigo.\n"
-    "   - computer_use_action: para abrir navegador, clicar ou automacao de tela.\n"
-    "2. Para qualquer dialogo conversacional (saudacoes, duvidas, hesitacoes como 'nao sei ainda', "
-    "despedidas, agradecimentos, confirmacoes ou negacoes como 'nenhum', 'nada nao', 'deixa quieto'): "
-    "responda de forma contextual, amigavel e humana. Nunca recite listas de opcoes ou comandos a menos "
-    "que o usuario pergunte expressamente o que voce pode fazer. Se o usuario recusar ou hesitar, acolha de forma leve e deixe-o a vontade.\n"
-    "3. Nunca invente data, hora, hardware ou arquivos: invoque a tool e use o resultado real retornado."
+    "   - check_system_hardware: para status da memoria, CPU, disco, hardware ou telemetria da maquina.\n"
+    "   - list_project_files: para listar arquivos, pastas ou modulos do projeto.\n"
+    "   - start_agy_task: para QUALQUER tarefa de codigo, criar ou editar arquivos, comandos de terminal, operacoes git (status, commit, log, diff, branch), rodar testes ou criar scripts. Para commit, gere a mensagem automaticamente se o usuario nao fornecer.\n"
+    "   - computer_use_action: para abrir programas no Windows (calculadora, bloco de notas, navegador), abrir sites/URLs, tirar screenshot ou automacao de tela.\n"
+    "2. NUNCA ignore ou responda com recusa a uma tarefa acionavel: despache imediatamente a tool adequada (start_agy_task para engenharia/git/arquivos/terminal, computer_use_action para abrir apps/sites/telas).\n"
+    "3. Para dialogos puramente sociais que NAO pecam nenhuma acao (saudacoes, duvidas, agradecimentos, hesitacoes como 'nao sei ainda', encerramentos, 'nenhum', 'deixa quieto'): responda de forma acolhedora, breve e humana.\n"
+    "4. Nunca invente data, hora, hardware ou arquivos: invoque a tool e use o resultado real retornado."
 )
 
 TOOLS_DECLARATION = [{
@@ -76,11 +74,11 @@ TOOLS_DECLARATION = [{
         },
         {
             "name": "start_agy_task",
-            "description": "Tarefa de engenharia/codigo em background.",
+            "description": "Executa tarefas de engenharia, codigo, criacao de arquivos, comandos de terminal, git (status, commit, log, diff) e testes.",
             "parameters": {
                 "type": "OBJECT",
                 "properties": {
-                    "prompt": {"type": "STRING", "description": "Instrucao tecnica detalhada"},
+                    "prompt": {"type": "STRING", "description": "Instrucao tecnica detalhada para execucao"},
                     "description": {"type": "STRING", "description": "Resumo em 3 palavras"},
                 },
                 "required": ["prompt", "description"],
@@ -88,12 +86,12 @@ TOOLS_DECLARATION = [{
         },
         {
             "name": "computer_use_action",
-            "description": "Automacao visual (navegador, clique, screenshot).",
+            "description": "Automacao do Windows: abre programas (calculadora, bloco de notas, navegador), abre URLs, captura screenshot ou automacao de tela.",
             "parameters": {
                 "type": "OBJECT",
                 "properties": {
-                    "action": {"type": "STRING", "description": "open_url, click, screenshot, etc."},
-                    "target": {"type": "STRING", "description": "URL, seletor ou descricao"},
+                    "action": {"type": "STRING", "description": "open_app, open_url, click, screenshot, etc."},
+                    "target": {"type": "STRING", "description": "Nome do app, URL ou alvo da acao"},
                     "description": {"type": "STRING", "description": "Resumo em 3 palavras"},
                 },
                 "required": ["action", "target", "description"],
