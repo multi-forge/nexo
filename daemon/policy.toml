@@ -1,0 +1,22 @@
+[server]
+listen_addr = "127.0.0.1:3284"
+
+[workspaces]
+allowed = [
+    "C:/Users/Aluno",
+    "C:/Users/Aluno/workspace",
+    "C:/Users/Aluno/nexo-daemon"
+]
+denied = [
+    "C:/Windows",
+    "C:/Users/Aluno/.ssh",
+    "C:/Users/Aluno/.gnupg"
+]
+
+[host_actions.allowlist]
+binaries = ["code", "pwsh", "powershell", "cargo", "git", "gh"]
+max_volume_step = 15
+
+[security]
+unattended_risk_ceiling = "L1"
+require_explicit_confirmation_for = ["L2_WRITE", "L3_SYSTEM"]

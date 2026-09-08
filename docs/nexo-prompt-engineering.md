@@ -180,7 +180,7 @@ async def build_reconnect_context() -> str:
     modified = [l.split()[-1] for l in status.strip().split("\n") if l.strip()]
 
     # Last session state (persistido em arquivo)
-    state = load_json("~/.jarvis/session_state.json")
+    state = load_json("~/.nexo/session_state.json")
 
     return RECONNECT_CONTEXT_TEMPLATE.format(
         branch=branch.strip(),
@@ -442,7 +442,7 @@ class VerbosityController:
 import json
 from pathlib import Path
 
-STATE_FILE = Path.home() / ".jarvis" / "session_state.json"
+STATE_FILE = Path.home() / ".nexo" / "session_state.json"
 
 class SessionState:
     """Estado conversacional persistente entre resets de sessão."""

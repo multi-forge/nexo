@@ -237,7 +237,7 @@ agy mcp add telegram -- npx -y @anthropic/mcp-server-telegram
 
 ```bash
 #!/bin/bash
-# jarvis-mcp-setup.sh — Instala todos os MCPs do Nexo
+# nexo-mcp-setup.sh — Instala todos os MCPs do Nexo
 
 set -euo pipefail
 

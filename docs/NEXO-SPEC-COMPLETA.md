@@ -38,7 +38,7 @@ baixa latência com VAD local. O computador host executa o daemon orquestrador c
 │          │         ├──► [Code Path] ─► AGY CLI (--print --stream-json)   │
 │          │         └──► [Deep Path] ─► AGY Async + TTS Narrator          │
 │          │                                                               │
-│          ├──► [Session State Manager] ─► ~/.jarvis/session_state.json    │
+│          ├──► [Session State Manager] ─► ~/.nexo/session_state.json    │
 │          │                                                               │
 │          ├──► [MCP Servers] ─► context7, memory, git, sequential-thinking│
 │          │                                                               │
@@ -69,7 +69,7 @@ Cada mensagem WebSocket usa um byte de tipo seguido do payload:
 {"event": "PTT_START"}
 {"event": "PTT_STOP"}
 {"event": "BATTERY", "level": 72, "charging": false}
-{"event": "AUTH", "token": "jarvis-secret-token-2024"}
+{"event": "AUTH", "token": "nexo-secret-token-2024"}
 
 // Host → Phone
 {"event": "SESSION_READY"}
@@ -86,7 +86,7 @@ Cada mensagem WebSocket usa um byte de tipo seguido do payload:
 ### AudioService.kt (Completo com Reconnect e Framing)
 
 ```kotlin
-package com.jarvis.dev
+package com.nexo.dev
 
 import android.app.*
 import android.content.Intent
@@ -112,7 +112,7 @@ class AudioService : Service() {
         private const val FRAME_SIZE = 512           // amostras por chunk (32ms)
         private const val PLAYBACK_RATE = 24000       // Gemini retorna 24kHz
         private const val HOST_URL = "ws://100.x.y.z:8765"
-        private const val AUTH_TOKEN = "jarvis-secret-token-2024"
+        private const val AUTH_TOKEN = "nexo-secret-token-2024"
         private const val MAX_RECONNECT_DELAY_MS = 30_000L
 
         // Tipos de frame
@@ -323,7 +323,7 @@ class AudioService : Service() {
 ### SileroVadNative.kt (Interface JNI para o ONNX)
 
 ```kotlin
-package com.jarvis.dev
+package com.nexo.dev
 
 object SileroVadNative {
     init {
@@ -348,7 +348,7 @@ object SileroVadNative {
 ### AudioPlaybackEngine.kt (Playback com Jitter Buffer)
 
 ```kotlin
-package com.jarvis.dev
+package com.nexo.dev
 
 import android.media.AudioAttributes
 import android.media.AudioFormat
@@ -444,9 +444,9 @@ GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 HOST_PORT = int(os.environ.get("NEXO_PORT", "8765"))
-AUTH_TOKEN = os.environ.get("NEXO_AUTH_TOKEN", "jarvis-secret-token-2024")
+AUTH_TOKEN = os.environ.get("NEXO_AUTH_TOKEN", "nexo-secret-token-2024")
 PROJECT_DIR = os.environ.get("PROJECT_DIR", os.path.expanduser("~/project"))
-STATE_FILE = Path.home() / ".jarvis" / "session_state.json"
+STATE_FILE = Path.home() / ".nexo" / "session_state.json"
 
 # Frame types
 FRAME_AUDIO_MIC = 0x01
@@ -1395,7 +1395,7 @@ nexo/
 ├── docs/
 │   └── SPEC.md                        # Este documento
 │
-└── ~/.jarvis/
+└── ~/.nexo/
     └── session_state.json             # Estado persistente entre sessões
 ```
 

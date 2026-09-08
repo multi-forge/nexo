@@ -20,11 +20,16 @@ build/
 .venv/
 venv/
 
+# Rust
+target/
+**/target/
+
 # Screenshots and temporary media
-*_screenshot.png
-*_response.wav
-*_response.mp3
+*.png
+*.wav
+*.mp3
 cue_*.mp3
+nexo_cue_*.mp3
 
 # IDE
 .vscode/

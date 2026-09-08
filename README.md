@@ -135,24 +135,30 @@ End-to-end latency from user speech to first audible response byte:
 
 ## Core Components
 
-### Host Daemon (Windows)
+### Host Daemon (Rust Native)
 
-**`host-windows/nexo_daemon.py`** -- The unified Windows daemon providing:
+**`daemon/`** -- The local execution daemon written in Rust for deterministic security and sub-millisecond dispatch:
 
-- **Win32 Native Engine**: Direct `ctypes` calls to `user32.dll`, `gdi32.dll`, and `kernel32.dll` for mouse, keyboard, window management, and screen capture. Zero process spawning, zero script execution. All operations execute in < 2 ms.
-- **Gemini Live Relay**: Bidirectional WebSocket connection to `wss://generativelanguage.googleapis.com` with the Multimodal Live API. Handles audio streaming, tool call dispatch, and voice synthesis relay.
-- **MCP Server (stdio)**: JSON-RPC 2.0 interface for the Antigravity CLI (`agy`) to consume Win32 tools as a Model Context Protocol server.
+- **Policy Engine (`policy.rs`)**: Validates workspaces, denied paths, and binary allowlists via `policy.toml` with zero hallucination risk.
+- **Agent Supervisor (`supervisor.rs`)**: Direct integration with Antigravity CLI (`agy.exe agentapi new-conversation` and `send-message`).
+- **Host Runtime (`host_runtime.rs`)**: Real hardware inventory (CPU, RAM, GPU, storage) and host controls.
+- **Transport Receiver (`transport.rs`)**: Async HTTP/TCP endpoint (port 3284) for health checks, telemetry, and secure task dispatch.
 
-**`host-windows/host_orchestrator.py`** -- Alternative gateway with Playwright-based Computer Use:
+### Voice & Latency Orchestration
 
-- Headless Chromium browser in RAM for web navigation, content extraction, and screenshots.
-- PowerShell command execution with output capture.
+**`orchestrator/`** -- The cognitive voice orchestration layer:
 
-**`host-windows/agy_agent_bridge.py`** -- AGY integration bridge:
+- **`voice_queue.py`**: Dynamic audio queue implementing psychology-based latency masking, anti-chatter debouncing (3000ms), and buffer flush upon task completion.
+- **`live_bridge.py`**: Bidirectional WebSocket gateway to Google Gemini Multimodal Live API with native function calling linked to the host daemon.
+- **`pipeline_stt_tts.py`**: Decoupled multi-stage pipeline supporting Google Cloud Speech v2 (Chirp), Gemini 3.5 Flash-Lite, and Google Cloud Neural2 TTS.
+- **`voice_ux_profile.toml`**: Psychology-derived timing parameters (Doherty <400ms, Nielsen limits, turn-taking gap).
 
-- Dispatches autonomous engineering tasks to `agy agentapi`.
-- Streams `stream-json` events in real-time for progress tracking.
-- Enables background code refactoring, file operations, and build/test cycles without blocking the voice conversation.
+### Desktop Computer Use (MCP)
+
+**`mcp/windows_computer_use.py`** -- Model Context Protocol (MCP) server registered in AGY:
+
+- Native Win32 API calls (`user32.dll`, `gdi32.dll`) for mouse clicks, coordinates, typing, hotkeys, window management, and desktop screenshots.
+- Zero external heavyweight dependencies; runs in memory via stdio JSON-RPC 2.0.
 
 ### Mobile Client (Android)
 
@@ -167,12 +173,10 @@ End-to-end latency from user speech to first audible response byte:
 - Measures connection time, time-to-first-audio (TTFA), and total operation duration.
 - Tests the full Computer Use pipeline: voice command, web navigation, screenshot, and voice response.
 
-### Infrastructure
+### Infrastructure & Scripts
 
-**`scripts/wake_on_lan.py`** -- Remote boot via Wake-on-LAN / Intel vPro:
-
-- Sends magic packets to start the Windows host from an Orange Pi on the LAN.
-- Enables the mobile client to wake the workstation before establishing the voice session.
+**`scripts/setup_windows.ps1`** -- Unified Windows host setup: OpenSSH, firewall rules (ports 3284, 8765, 22), Rust daemon build, and AGY MCP registration.
+**`scripts/wake_on_lan.py`** -- Remote boot via Wake-on-LAN / Intel vPro from an Orange Pi on the LAN.
 
 ---
 
@@ -404,16 +408,19 @@ max_level = "L1"
 ```powershell
 # Clone the repository
 git clone https://github.com/multi-forge/nexo.git
-cd nexo/host-windows
+cd nexo
 
 # Set environment variables
 $env:GEMINI_API_KEY = "<your-api-key>"
 
-# Run automated setup
-.\setup_windows.ps1
+# Run unified setup (OpenSSH, firewall, build daemon, register MCP)
+.\scripts\setup_windows.ps1
 
-# Start the daemon
-python nexo_daemon.py
+# Start the native Rust daemon
+.\daemon\target\release\nexo-daemon.exe run
+
+# In another terminal: start the voice orchestrator
+python .\orchestrator\voice_queue.py
 ```
 
 ### 2. Mobile Client (Android / Termux)
@@ -439,30 +446,45 @@ python scripts/wake_on_lan.py AA:BB:CC:DD:EE:FF
 
 ```
 nexo/
-├── README.md                              # This document
-├── docs/                                  # Technical specifications
-│   ├── NEXO-SPEC-COMPLETA.md             # Master architecture specification
-│   ├── nexo-event-architecture.md        # Event system and async task architecture
-│   ├── nexo-latency-map.md              # Zero-copy latency map
-│   ├── nexo-mcp-stack.md               # MCP server catalog and specification
-│   ├── nexo-prompt-engineering.md       # Prompt engineering and voice calibration
-│   ├── nexo-streaming-architecture.md   # NDJSON and WebSocket streaming protocol
-│   └── VOICE-UX-PSYCHOLOGY.md           # Psychology-informed Voice UX specification
+├── README.md                              # Master enterprise documentation
+├── SECURITY.md                            # Credential management and vulnerability policy
+├── .gitignore                             # Environment, credential, and media filters
 │
-├── host-windows/                          # Windows host daemon and tools
-│   ├── nexo_daemon.py                    # Unified daemon: Win32 engine + Gemini Live + MCP
-│   ├── host_orchestrator.py              # WebSocket gateway with Playwright Computer Use
-│   ├── agy_agent_bridge.py              # Antigravity CLI (AGY) integration bridge
-│   ├── mcp_windows_computer_use.py      # MCP server for desktop automation
-│   ├── setup_windows.ps1                # Automated Windows setup script
-│   └── requirements.txt                 # Python dependencies
+├── daemon/                                # Nexo Daemon (Rust native execution engine)
+│   ├── Cargo.toml                         # Cargo package manifest
+│   ├── policy.toml                        # Strict security and workspace policy
+│   └── src/
+│       ├── main.rs                        # Daemon CLI entrypoint (run, hardware, tasks)
+│       ├── policy.rs                      # Deterministic policy validation engine
+│       ├── host_runtime.rs                # Hardware telemetry (CPU, RAM, GPU, Disks)
+│       ├── supervisor.rs                  # AGY supervisor (agentapi integration)
+│       └── transport.rs                   # Async HTTP/TCP receiver (port 3284)
+│
+├── orchestrator/                          # Voice UX & cognitive orchestration layer
+│   ├── voice_queue.py                     # Dynamic audio queue with latency masking
+│   ├── live_bridge.py                     # Gemini Multimodal Live API WebSocket bridge
+│   ├── pipeline_stt_tts.py                # Decoupled pipeline (Chirp STT, Flash-Lite, Neural2 TTS)
+│   ├── voice_ux_profile.toml              # Psychology timing profiles (Doherty, Nielsen, Anti-Fatigue)
+│   └── requirements.txt                   # Python dependencies
+│
+├── mcp/                                   # Model Context Protocol servers for AGY
+│   └── windows_computer_use.py            # Win32 desktop automation MCP server
 │
 ├── client-mobile/                         # Mobile clients and benchmarks
-│   ├── test_client.py                    # CLI streaming test client
-│   └── benchmark_latency.py             # End-to-end latency measurement suite
+│   ├── test_client.py                     # CLI streaming test client
+│   └── benchmark_latency.py              # End-to-end latency measurement suite
 │
-└── scripts/                               # Automation and infrastructure
-    └── wake_on_lan.py                    # Remote boot via WoL / Intel vPro
+├── scripts/                               # Automation and provisioning
+│   ├── setup_windows.ps1                  # Unified host provisioning script
+│   └── wake_on_lan.py                     # Remote boot via WoL / Intel vPro
+│
+└── docs/                                  # Architectural specifications
+    ├── NEXO-SPEC-COMPLETA.md              # Master engineering specification
+    ├── nexo-event-architecture.md         # Event system and async task architecture
+    ├── nexo-latency-map.md               # Zero-copy latency map (~375ms budget)
+    ├── nexo-mcp-stack.md                # MCP server catalog and priority tiers
+    ├── nexo-prompt-engineering.md        # Prompt engineering and voice calibration
+    └── nexo-streaming-architecture.md    # NDJSON and WebSocket streaming protocol
 ```
 
 ---

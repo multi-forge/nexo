@@ -1,0 +1,64 @@
+# ====================================================================
+# nexo: voice_ux_profile.toml
+# Perfil Enterprise derivado de 12 principios de psicologia cognitiva
+# ====================================================================
+
+[profile]
+name = "enterprise-guide"
+description = "Perfil profissional para assistente de voz empresarial"
+
+# --- 1. Latencia (Doherty + Nielsen + Turn-Taking) ---
+[latency]
+ack_deadline_ms = 300          # ACK audivel antes de 300ms (meta conversacional)
+doherty_ceiling_ms = 400       # Teto absoluto Doherty Threshold
+nielsen_flow_ms = 1000         # Acima disso: precisa feedback
+nielsen_attention_ms = 10000   # Acima disso: precisa narracao continua
+target_turn_gap_ms = 250       # Meta de gap entre turnos (Sacks/Schegloff)
+
+# --- 2. Silencio (Tolerancia + Prevencao) ---
+[silence]
+max_dead_ms = 1500             # Silencio maximo antes de emitir cue
+emergency_filler_ms = 2000     # Se nada na fila: emitir filler de acao
+abandon_risk_ms = 4000         # Alerta: risco de abandono pelo usuario
+user_expectation = "task_dependent"
+
+# --- 3. Fila Dinamica de Audio (Cognitive Load + Anti-Fatigue) ---
+[queue]
+max_cue_words = 12             # Phonological loop: max 12 palavras/frase
+max_queued_cues = 3            # Flush intermediarios se > 3 pendentes
+min_gap_between_cues_ms = 3000 # Debounce: minimo 3s entre frases (anti-chatter)
+max_cues_per_task = 5          # Maximo 5 intervencoes por tarefa completa
+cooldown_after_burst_ms = 5000 # Se 3 cues em < 5s: silenciar 5s
+flush_on_final_response = true # Ao receber resposta final: descartar cues pendentes
+
+# --- 4. Discurso e Tom (Enterprise Persona) ---
+[persona]
+name = "Nexo"
+style = "guide"                # Competente, direto, prestativo
+transparency = true            # Nunca fingir ser humano
+voice_model = "pt-BR-Neural2-A"
+speaking_rate = 1.1            # 10% acima da velocidade normal
+
+[discourse]
+marker_style = "action_objective"
+avoid_patterns = [
+    "hmm", "uh", "tipo", "deixa eu pensar",
+    "vou tentar", "talvez", "acho que",
+    "desculpa", "ops"
+]
+confirmation_tone = true       # Tom breve (440Hz, 80ms) antes da primeira frase
+
+# --- 5. Barge-in (Interrupcao) ---
+[barge_in]
+enabled = true
+vad_sensitivity = 0.6
+flush_queue = true
+cancel_tts = true
+min_speech_ms = 300            # Ignora sons < 300ms (evitar falso positivo)
+
+# --- 6. Progressive Disclosure ---
+[disclosure]
+start_with_summary = true      # Primeiro: acao resumida ("Verificando...")
+details_on_demand = true       # Detalhes so se o usuario perguntar
+omit_internal_logs = true      # Nunca narrar stack traces ou codigos HTTP
+error_style = "offer_retry"    # "Encontrei um problema. Posso tentar novamente?"
