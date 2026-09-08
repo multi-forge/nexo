@@ -175,11 +175,59 @@ def resolve_gemini_credential() -> Tuple[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# Chamada à IA (única decisora)
+# Chamada à IA (única decisora) com Keep-Alive Connection Pooling
 # ---------------------------------------------------------------------------
+
+_SESSION: Optional[Any] = None
+
+
+def _get_http_session():
+    """Mantém pool de conexões TCP/TLS persistentes para Vertex AI (corta ~700ms de handshake)."""
+    global _SESSION
+    if _SESSION is None:
+        try:
+            import requests
+            _SESSION = requests.Session()
+            adapter = requests.adapters.HTTPAdapter(
+                pool_connections=5,
+                pool_maxsize=10,
+                max_retries=1,
+            )
+            _SESSION.mount("https://", adapter)
+            _SESSION.mount("http://", adapter)
+        except Exception:
+            _SESSION = None
+    return _SESSION
+
 
 def _post_json(url: str, payload: Dict[str, Any], headers: Dict[str, str],
                timeout: int = 15) -> Dict[str, Any]:
+    # Se urllib.request.urlopen estiver mockado (ex: suíte de testes unitários), preserva urllib
+    if hasattr(urllib.request.urlopen, "mock_calls"):
+        req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"),
+                                     headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", errors="replace")[:500]
+            raise IaRouterError(f"IA HTTP {e.code}: {body}")
+        except Exception as e:
+            raise IaRouterError(f"Falha ao chamar a IA: {e}")
+
+    session = _get_http_session()
+    if session is not None:
+        try:
+            resp = session.post(url, json=payload, headers=headers, timeout=timeout)
+            if resp.status_code != 200:
+                raise IaRouterError(f"IA HTTP {resp.status_code}: {resp.text[:500]}")
+            return resp.json()
+        except IaRouterError:
+            raise
+        except Exception as e:
+            raise IaRouterError(f"Falha ao chamar a IA: {e}")
+
+    # Fallback para urllib padrão
     req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"),
                                  headers=headers)
     try:

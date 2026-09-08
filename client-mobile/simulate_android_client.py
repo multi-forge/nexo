@@ -28,6 +28,7 @@ import asyncio
 import subprocess
 import urllib.request
 import json
+import hashlib
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
 
@@ -315,6 +316,8 @@ class AndroidCircuitSimulator:
         self.nexo_voice = "pt-BR-FranciscaNeural"     # Female voice for Nexo assistant
         self.temp_dir = REPO_ROOT / "client-mobile" / "temp_audio"
         self.temp_dir.mkdir(exist_ok=True)
+        self.ack_cache_dir = self.temp_dir / "ack_cache"
+        self.ack_cache_dir.mkdir(parents=True, exist_ok=True)
         self.conversation_history: List[Dict[str, Any]] = []
 
         # Load psychology timing configurations
@@ -339,8 +342,27 @@ class AndroidCircuitSimulator:
             return " ".join(words[:self.max_words]) + "..."
         return text
 
-    async def speak_user_input(self, text: str):
-        """Phase 1: Synthesize and play the user speaking into the Android microphone."""
+    async def get_cached_ack_audio(self, text: str) -> str:
+        """Retorna o audio do ACK do cache local em <5ms (ou sintetiza uma vez se inexistente)."""
+        self.ack_cache_dir.mkdir(parents=True, exist_ok=True)
+        h = hashlib.md5(f"{self.nexo_voice}:{text}".encode("utf-8")).hexdigest()[:12]
+        cache_path = self.ack_cache_dir / f"ack_{h}.mp3"
+        if cache_path.exists() and cache_path.stat().st_size > 200:
+            return str(cache_path)
+        comm = edge_tts.Communicate(text, self.nexo_voice, rate="+0%")
+        await comm.save(str(cache_path))
+        return str(cache_path)
+
+    async def speak_user_input(self, text: str, force_tts: bool = False):
+        """Fase 1: Entrada de fala do usuario no microfone do Android."""
+        simulate_audio = (force_tts or
+                          os.environ.get("NEXO_SIMULATE_USER_SPEECH", "0") == "1" or
+                          "--voice-user" in sys.argv)
+        if not simulate_audio:
+            print(f"\n[1. Smartphone Microfone (Oboe 16kHz PCM)] Fala capturada:")
+            print(f"     -> [FALA DO USUARIO]: \"{text}\"")
+            return
+
         user_audio_path = str(self.temp_dir / f"user_{int(time.time()*1000)}.mp3")
         print(f"\n[1. Smartphone Microfone] Sintetizando sua fala ({self.user_voice})...")
         comm = edge_tts.Communicate(text, self.user_voice, rate="+0%")
@@ -350,7 +372,7 @@ class AndroidCircuitSimulator:
         self.audio.play_wav_or_mp3(user_audio_path, wait=True)
 
     def simulate_network_framing(self, text: str):
-        """Phase 2: Emulate Oboe C++ 16kHz PCM audio framing and WireGuard P2P transit."""
+        """Fase 2: Emula framing PCM 16kHz Oboe C++ e transito WireGuard P2P."""
         word_count = len(text.split())
         pcm_bytes = word_count * 3200
         chunks = max(1, pcm_bytes // 1280)
@@ -359,6 +381,10 @@ class AndroidCircuitSimulator:
         print(f"     -> Empacotando {chunks} chunks de áudio PCM (Frame 0x01 | 16kHz 16-bit mono)...")
         print(f"     -> Túnel WireGuard (Tailscale tsnet P2P) transitado em ~130ms RTT.")
         print(f"     -> Frame 0x03 (Turn Complete / Fim de fala) transmitido ao Nexo Host.")
+
+        # Emite earcon acústico imediato no Frame 0x03 (<50ms feedback Doherty)
+        earcon_pcm = generate_earcon_tone(freq=440, duration_ms=50, sample_rate=44100)
+        self.audio.play_pcm_tone(earcon_pcm, sample_rate=44100, wait=False)
 
     async def run_nexo_circuit(self, prompt: str):
         """Fase 3: a IA decide a rota via system prompt + function calling com histórico conversacional."""
@@ -378,10 +404,6 @@ class AndroidCircuitSimulator:
         # =====================================================================
         if route == "ROUTE_1_DIALOGUE":
             print("     -> Intenção conversacional identificada. Resposta direta imediata.")
-            # Micro-earcon (44100Hz suave)
-            earcon_pcm = generate_earcon_tone(freq=520, duration_ms=40, sample_rate=44100)
-            self.audio.play_pcm_tone(earcon_pcm, sample_rate=44100, wait=False)
-
             answer_text = direct_response or "Estou aqui. Em que posso ajudar você?"
             resp_path = str(self.temp_dir / f"dialogue_{int(time.time()*1000)}.mp3")
             comm = edge_tts.Communicate(answer_text, self.nexo_voice, rate="+0%")
@@ -401,23 +423,28 @@ class AndroidCircuitSimulator:
         if route == "ROUTE_2_FAST_TOOL":
             tool_name = direct_response or "check_system_hardware"
             print(f"     -> Consulta rápida acionada: {tool_name}.")
-            earcon_pcm = generate_earcon_tone(freq=440, duration_ms=60, sample_rate=44100)
-            self.audio.play_pcm_tone(earcon_pcm, sample_rate=44100, wait=False)
 
-            # Fast ACK contextual (Doherty <300ms)
+            # Fast ACK contextual carregado do cache local (<5ms)
             ack_text = contextual_ack(route, {"tool": tool_name})
-            ack_path = str(self.temp_dir / f"fast_ack_{int(time.time()*1000)}.mp3")
-            comm = edge_tts.Communicate(ack_text, self.nexo_voice, rate="+0%")
-            await comm.save(ack_path)
+            ack_path = await self.get_cached_ack_audio(ack_text)
             print(f"     -> [FAST ACK]: \"{ack_text}\"")
-            self.audio.play_wav_or_mp3(ack_path, wait=True)
 
+            # 1. Inicia áudio do ACK de imediato (não-bloqueante)
+            self.audio.play_wav_or_mp3(ack_path, wait=False)
+
+            # 2. PIPELINING: Executa tool real e sintetiza áudio final enquanto ACK soa
             tool_result = execute_fast_tool(tool_name)
             answer_text = tool_result.get("spoken", "Consulta concluída.")
             resp_path = str(self.temp_dir / f"fast_{int(time.time()*1000)}.mp3")
             comm = edge_tts.Communicate(answer_text, self.nexo_voice, rate="+0%")
             await comm.save(resp_path)
 
+            # 3. Aguarda fim suave do ACK se ainda estiver tocando
+            while self.audio.active_channel and self.audio.active_channel.get_busy():
+                await asyncio.sleep(0.02)
+            await asyncio.sleep(0.02)
+
+            # 4. Entrega da resposta sem pausa de silêncio (Zero Dead Time)
             elapsed_ms = (time.perf_counter() - t_start) * 1000
             print(f"\n[4. Resposta Rápida Concluída ({tool_name} em {elapsed_ms:.0f}ms)]")
             print(f"     -> [OUVINDO RESPOSTA DO NEXO]: \"{answer_text}\"\n")
@@ -431,15 +458,14 @@ class AndroidCircuitSimulator:
         # =====================================================================
         if route == "ROUTE_4_COMPUTER_USE":
             print("     -> Automação de interface identificada. Despachando Computer Use.")
-            earcon_pcm = generate_earcon_tone(freq=440, duration_ms=60, sample_rate=44100)
-            self.audio.play_pcm_tone(earcon_pcm, sample_rate=44100, wait=False)
             ack_text = contextual_ack(route, {"action": prompt})
-            ack_path = str(self.temp_dir / f"cu_ack_{int(time.time()*1000)}.mp3")
-            comm = edge_tts.Communicate(ack_text, self.nexo_voice, rate="+0%")
-            await comm.save(ack_path)
+            ack_path = await self.get_cached_ack_audio(ack_text)
             print(f"     -> [DOHERTY / TURN-TAKING ACK]: \"{ack_text}\"")
-            self.audio.play_wav_or_mp3(ack_path, wait=True)
 
+            # 1. Inicia áudio do ACK do cache de imediato
+            self.audio.play_wav_or_mp3(ack_path, wait=False)
+
+            # 2. PIPELINING: Executa ação visual e sintetiza áudio de conclusão em paralelo
             action_data = direct_response if isinstance(direct_response, dict) else {}
             act_name = action_data.get("action", "")
             target_name = action_data.get("target", "") or prompt
@@ -448,6 +474,13 @@ class AndroidCircuitSimulator:
             final_path = str(self.temp_dir / f"cu_final_{int(time.time()*1000)}.mp3")
             comm = edge_tts.Communicate(final_text, self.nexo_voice, rate="+0%")
             await comm.save(final_path)
+
+            # 3. Aguarda término do ACK
+            while self.audio.active_channel and self.audio.active_channel.get_busy():
+                await asyncio.sleep(0.02)
+            await asyncio.sleep(0.02)
+
+            # 4. Zero Dead Time delivery
             elapsed_ms = (time.perf_counter() - t_start) * 1000
             print(f"\n[4. Resposta Computer Use Concluída ({elapsed_ms:.0f}ms)]")
             print(f"     -> [OUVINDO RESPOSTA DO NEXO]: \"{final_text}\"\n")
@@ -461,32 +494,21 @@ class AndroidCircuitSimulator:
         # =====================================================================
         print("     -> Tarefa técnica identificada. Executando ação no host.")
 
-        # 1. Earcon Chime
-        earcon_pcm = generate_earcon_tone(freq=440, duration_ms=60, sample_rate=44100)
-        print("     -> [EARCON CHIME] Pulso acústico emitido (440Hz, 60ms).")
-        self.audio.play_pcm_tone(earcon_pcm, sample_rate=44100, wait=False)
-
-        # 2. Contextual ACK (<300ms Doherty Threshold)
+        # 1. Contextual ACK (<5ms via disco) tocando de imediato
         ack_text = contextual_ack("ROUTE_3_AGY_TASK", {"task": prompt})
-        ack_path = str(self.temp_dir / f"ack_{int(time.time()*1000)}.mp3")
-        comm = edge_tts.Communicate(ack_text, self.nexo_voice, rate="+0%")
-        await comm.save(ack_path)
-
+        ack_path = await self.get_cached_ack_audio(ack_text)
         print(f"     -> [DOHERTY / TURN-TAKING ACK]: \"{ack_text}\"")
-        self.audio.play_wav_or_mp3(ack_path, wait=True)
+        self.audio.play_wav_or_mp3(ack_path, wait=False)
 
-        # 3. Execução real da tarefa técnica (Git, Arquivos, Terminal ou AGY)
+        # 2. PIPELINING: Execução real no host + síntese TTS da resposta durante a fala do ACK
         task_data = direct_response if isinstance(direct_response, dict) else {}
         task_str = task_data.get("task", prompt) if isinstance(task_data, dict) else (direct_response or prompt)
 
         loop = asyncio.get_running_loop()
         final_text = await loop.run_in_executor(None, lambda: execute_engineering_task(task_str))
-
-        # Se falhar completamente e nenhum despachante estiver disponível
         if not final_text:
             final_text = f"O agente de engenharia nao esta disponivel no host para {task_str}."
 
-        # 4. Deliver Final Spoken Response
         final_summary = final_text.split("\n")[0].strip()
         final_words = final_summary.split()
         if len(final_words) > 20:
@@ -496,6 +518,12 @@ class AndroidCircuitSimulator:
         comm = edge_tts.Communicate(final_summary, self.nexo_voice, rate="+0%")
         await comm.save(final_path)
 
+        # 3. Aguarda término suave do ACK se ainda estiver tocando
+        while self.audio.active_channel and self.audio.active_channel.get_busy():
+            await asyncio.sleep(0.02)
+        await asyncio.sleep(0.02)
+
+        # 4. Zero Dead Time delivery
         elapsed_ms = (time.perf_counter() - t_start) * 1000
         print(f"\n[4. Resposta Final Concluida (Tarefa em {elapsed_ms:.0f}ms)]")
         print(f"     -> [OUVINDO RESPOSTA DO NEXO]: \"{final_summary}\"\n")
@@ -505,13 +533,14 @@ class AndroidCircuitSimulator:
         return
 
     def cleanup(self):
-        """Removes temporary audio files."""
+        """Removes temporary session audio files, preserving persistent ack_cache."""
         if self.temp_dir.exists():
-            for f in self.temp_dir.glob("*.mp3"):
-                try:
-                    f.unlink()
-                except Exception:
-                    pass
+            for f in self.temp_dir.iterdir():
+                if f.is_file() and f.suffix == ".mp3":
+                    try:
+                        f.unlink()
+                    except Exception:
+                        pass
 
 
 async def main():
