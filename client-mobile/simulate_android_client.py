@@ -56,45 +56,52 @@ if sys.platform == "win32":
 
 
 class AudioEngine:
-    """Manages physical sound card playback via pygame.mixer."""
+    """Manages physical sound card playback via pygame.mixer with guaranteed full duration."""
     def __init__(self):
-        pygame.mixer.init(frequency=24000, size=-16, channels=1, buffer=1024)
-        self.is_playing = False
+        try:
+            pygame.mixer.quit()
+        except Exception:
+            pass
+        # 44100Hz stereo with 4096 buffer prevents buffer underrun and crackle on Windows
+        pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=4096)
+        self.active_channel = None
 
     def play_wav_or_mp3(self, filepath: str, wait: bool = True):
-        """Plays an audio file through physical speakers."""
+        """Plays an audio file completely through physical speakers with guaranteed duration."""
         if not os.path.exists(filepath):
             return
 
         try:
-            pygame.mixer.music.load(filepath)
-            pygame.mixer.music.set_volume(1.0)
-            pygame.mixer.music.play()
-            self.is_playing = True
+            sound = pygame.mixer.Sound(filepath)
+            sound.set_volume(1.0)
+            dur = sound.get_length()
+            self.active_channel = sound.play()
 
-            if wait:
-                while pygame.mixer.music.get_busy():
+            if wait and self.active_channel:
+                t0 = time.perf_counter()
+                # Stay in wait loop for the exact mathematical duration of the sound clip
+                while (time.perf_counter() - t0) < dur:
                     time.sleep(0.04)
-                self.is_playing = False
+                # Hardware DAC drain buffer to ensure the final phoneme/syllable vibrates the speakers
+                time.sleep(0.35)
         except Exception as e:
             print(f"[AudioEngine] Erro na reproducao: {e}")
 
-    def play_pcm_tone(self, pcm_bytes: bytes, sample_rate: int = 24000, wait: bool = True):
+    def play_pcm_tone(self, pcm_bytes: bytes, sample_rate: int = 44100, wait: bool = True):
         """Plays raw PCM earcon tone in memory."""
         try:
             sound = pygame.mixer.Sound(buffer=pcm_bytes)
             sound.set_volume(0.5)
-            channel = sound.play()
-            if wait and channel:
-                while channel.get_busy():
-                    time.sleep(0.02)
+            ch = sound.play()
+            if wait and ch:
+                time.sleep(sound.get_length() + 0.05)
         except Exception:
             pass
 
     def stop(self):
         """Instantly cuts audio playback (barge-in support)."""
-        pygame.mixer.music.stop()
-        self.is_playing = False
+        if self.active_channel:
+            self.active_channel.stop()
 
 
 def generate_earcon_tone(freq: int = 440, duration_ms: int = 80, sample_rate: int = 24000) -> bytes:
@@ -205,7 +212,7 @@ class AndroidCircuitSimulator:
 
     async def speak_user_input(self, text: str):
         """Phase 1: Synthesize and play the user speaking into the Android microphone."""
-        user_audio_path = str(self.temp_dir / "user_input.mp3")
+        user_audio_path = str(self.temp_dir / f"user_{int(time.time()*1000)}.mp3")
         print(f"\n[1. Smartphone Microfone] Sintetizando sua fala ({self.user_voice})...")
         comm = edge_tts.Communicate(text, self.user_voice, rate="+0%")
         await comm.save(user_audio_path)
@@ -239,7 +246,7 @@ class AndroidCircuitSimulator:
             self.audio.play_pcm_tone(earcon_pcm, sample_rate=24000, wait=False)
 
             answer_text = direct_response or "Estou aqui. O que deseja realizar?"
-            resp_path = str(self.temp_dir / "dialogue_response.mp3")
+            resp_path = str(self.temp_dir / f"dialogue_{int(time.time()*1000)}.mp3")
             comm = edge_tts.Communicate(answer_text, self.nexo_voice, rate="+10%")
             await comm.save(resp_path)
 
@@ -258,14 +265,14 @@ class AndroidCircuitSimulator:
 
             # Fast ACK
             ack_text = "Consultando o sistema."
-            ack_path = str(self.temp_dir / "fast_ack.mp3")
+            ack_path = str(self.temp_dir / f"fast_ack_{int(time.time()*1000)}.mp3")
             comm = edge_tts.Communicate(ack_text, self.nexo_voice, rate="+10%")
             await comm.save(ack_path)
             print(f"     -> [FAST ACK]: \"{ack_text}\"")
             self.audio.play_wav_or_mp3(ack_path, wait=True)
 
             hw_summary = query_host_hardware()
-            resp_path = str(self.temp_dir / "hw_response.mp3")
+            resp_path = str(self.temp_dir / f"hw_{int(time.time()*1000)}.mp3")
             comm = edge_tts.Communicate(hw_summary, self.nexo_voice, rate="+5%")
             await comm.save(resp_path)
 
@@ -286,7 +293,7 @@ class AndroidCircuitSimulator:
 
         # 2. Contextual ACK (<300ms Doherty Threshold)
         ack_text = "Entendido. Iniciando a tarefa no projeto."
-        ack_path = str(self.temp_dir / "nexo_ack.mp3")
+        ack_path = str(self.temp_dir / f"ack_{int(time.time()*1000)}.mp3")
         comm = edge_tts.Communicate(ack_text, self.nexo_voice, rate="+10%")
         await comm.save(ack_path)
 
@@ -363,7 +370,7 @@ class AndroidCircuitSimulator:
                                         cue_msg = "Continuo processando os dados no host."
 
                                     cue_msg = self.sanitize_cue(cue_msg)
-                                    cue_path = str(self.temp_dir / f"cue_{cue_idx}.mp3")
+                                    cue_path = str(self.temp_dir / f"cue_{cue_idx}_{int(time.time()*1000)}.mp3")
                                     comm = edge_tts.Communicate(cue_msg, self.nexo_voice, rate="+10%")
                                     await comm.save(cue_path)
 
@@ -391,7 +398,7 @@ class AndroidCircuitSimulator:
             print("[Despachante] Executando passos de engenharia em contingencia...")
             await asyncio.sleep(0.5)
             cue_msg = "Inspecionando os modulos do projeto."
-            cue_path = str(self.temp_dir / "cue_0.mp3")
+            cue_path = str(self.temp_dir / f"cue_0_{int(time.time()*1000)}.mp3")
             comm = edge_tts.Communicate(cue_msg, self.nexo_voice, rate="+10%")
             await comm.save(cue_path)
             print(f"     -> [FILA DINAMICA / MASCARAMENTO]: \"{cue_msg}\"")
@@ -405,7 +412,7 @@ class AndroidCircuitSimulator:
         if len(final_words) > 18:
             final_summary = " ".join(final_words[:18]) + "."
 
-        final_path = str(self.temp_dir / "nexo_final.mp3")
+        final_path = str(self.temp_dir / f"final_{int(time.time()*1000)}.mp3")
         comm = edge_tts.Communicate(final_summary, self.nexo_voice, rate="+5%")
         await comm.save(final_path)
 
